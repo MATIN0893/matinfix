@@ -1,6 +1,6 @@
 [project]
 name = "matinfix"
-version = "0.1.0"
+version = "0.2.1"
 description = "MATINFIX repair service operations platform"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,6 +12,7 @@ dependencies = [
   "aiosqlite>=0.20,<1",
   "redis>=5,<7",
   "aiogram>=3.20,<4",
+  "alembic>=1.16,<2",
 ]
 
 [project.optional-dependencies]
