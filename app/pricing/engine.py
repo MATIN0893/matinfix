@@ -59,18 +59,23 @@ def detect_service(text: str) -> ServiceKind:
         return ServiceKind.PASSWORD
     if any(x in t for x in ("гидрогел", "пленк")):
         return ServiceKind.HYDROGEL
-    if any(x in t for x in ("чистк", "динамик", "микрофон", "гряз")):
-        return ServiceKind.CLEANING
-    if any(x in t for x in ("нижн", "микрофон", "нижняя плата")):
-        return ServiceKind.MIC_BOTTOM
-    if any(x in t for x in ("кнопк", "громк", "питани", "динамик")):
-        return ServiceKind.POWER_VOLUME_SPEAKER
-    if any(x in t for x in ("шлейф заряд", "charging flex")):
+    # Replacement/repair intent must win over generic cleaning words.
+    if any(x in t for x in ("шлейф заряд", "charging flex", "шлейф зарядки")):
         return ServiceKind.CHARGING_FLEX
-    if any(x in t for x in ("разъем заряд", "разъём заряд", "порт заряд")):
+    if any(x in t for x in ("разъем заряд", "разъём заряд", "порт заряд", "гнездо заряд")):
         return ServiceKind.CHARGING_PORT
-    if any(x in t for x in ("разговорн", "слухов")):
+    if any(x in t for x in ("нижн", "нижняя плата")) and any(x in t for x in ("плат", "шлейф", "микрофон")):
+        return ServiceKind.MIC_BOTTOM
+    if any(x in t for x in ("разговорн", "слухов", "earpiece")):
         return ServiceKind.EARPIECE
+    if any(x in t for x in ("кнопк", "громк", "питани")):
+        return ServiceKind.POWER_VOLUME_SPEAKER
+    if any(x in t for x in ("динамик", "speaker")) and any(x in t for x in ("замен", "ремонт", "не работает", "не слышно")):
+        return ServiceKind.POWER_VOLUME_SPEAKER
+    if any(x in t for x in ("чистк", "гряз", "прочист")):
+        return ServiceKind.CLEANING
+    if any(x in t for x in ("микрофон",)):
+        return ServiceKind.MIC_BOTTOM
     if any(x in t for x in ("пайк", "контакт", "провод")):
         return ServiceKind.SMALL_SOLDERING
     return ServiceKind.OTHER
@@ -104,7 +109,9 @@ class PriceEngine:
 
         if s == ServiceKind.SMALL_SOLDERING:
             return PriceDecision(b, model, str(s), 300, "universal")
-        if b in {"tecno", "vivo", "oppo", "realme"} or (b in {"xiaomi", "poco", "samsung", "honor"} and (model_year is None or model_year < 2022)):
+
+        # Tecno/Vivo/Oppo/Realme use the universal table for every model year.
+        if b in {"tecno", "vivo", "oppo", "realme"}:
             table = {
                 ServiceKind.DIAGNOSTICS: 500, ServiceKind.DISPLAY: 1500, ServiceKind.BATTERY: 1100,
                 ServiceKind.PASSWORD: 1500, ServiceKind.HYDROGEL: 600, ServiceKind.CLEANING: 600,
@@ -113,8 +120,20 @@ class PriceEngine:
             }
             if s in table:
                 return PriceDecision(b, model, str(s), table[s], "universal")
-            if s == ServiceKind.OTHER:
-                return PriceDecision(b, model, str(s), None, "master", True, "service not covered")
+            return PriceDecision(b, model, str(s), None, "master", True, "service not covered")
+
+        # For Xiaomi/Poco/Samsung/Honor, an unknown year is deliberately NOT
+        # treated as an old device. A caller must provide the year to select
+        # the 2022+ fixed-price rules.
+        if b in {"xiaomi", "poco", "samsung", "honor"} and model_year is not None and model_year < 2022:
+            table = {
+                ServiceKind.DIAGNOSTICS: 500, ServiceKind.DISPLAY: 1500, ServiceKind.BATTERY: 1100,
+                ServiceKind.PASSWORD: 1500, ServiceKind.HYDROGEL: 600, ServiceKind.CLEANING: 600,
+                ServiceKind.MIC_BOTTOM: 1300, ServiceKind.POWER_VOLUME_SPEAKER: 1000,
+                ServiceKind.CHARGING_FLEX: 1000, ServiceKind.CHARGING_PORT: 1200, ServiceKind.EARPIECE: 1200,
+            }
+            if s in table:
+                return PriceDecision(b, model, str(s), table[s], "universal")
             return PriceDecision(b, model, str(s), None, "master", True, "motherboard or unsupported service")
 
         if b in {"xiaomi", "poco", "samsung", "honor"} and model_year is not None and model_year >= 2022:
