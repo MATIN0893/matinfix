@@ -3,11 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from app.agents.core import MatinAICore
 from app.pricing.engine import PriceEngine
 from app.services.language import customer_price_text, detect_language
 
 router = APIRouter(prefix="/api/v1")
 engine = PriceEngine()
+ai_core = MatinAICore(engine)
 
 
 class PriceRequest(BaseModel):
@@ -58,3 +60,30 @@ class MessageRequest(BaseModel):
 @router.post("/language", tags=["language"])
 def language(request: MessageRequest) -> dict[str, str]:
     return {"language": detect_language(request.text)}
+
+
+class CustomerPriceRequest(PriceRequest):
+    pass
+
+
+class CoreResponse(BaseModel):
+    agent: str
+    language: str
+    response: str
+    needs_master: bool
+
+
+@router.post("/ai/customer/price", response_model=CoreResponse, tags=["ai-core"])
+async def ai_customer_price(request: CustomerPriceRequest) -> CoreResponse:
+    decision = await ai_core.handle_customer_price(
+        request.brand,
+        request.model,
+        request.service,
+        model_year=request.model_year,
+    )
+    return CoreResponse(
+        agent=decision.agent.value,
+        language=decision.language,
+        response=decision.response,
+        needs_master=decision.needs_master,
+    )
