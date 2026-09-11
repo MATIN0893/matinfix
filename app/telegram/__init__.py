@@ -1,0 +1,1 @@
+"""MATINFIX Telegram integration."""
