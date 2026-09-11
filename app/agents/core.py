@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from app.agents.registry import AgentName
 from app.accounting.mode import AccountantMode
 from app.pricing.engine import PriceEngine
-from app.services.language import customer_price_text, detect_language
+from app.services.language import MASTER_TEXT_BY_LANGUAGE, customer_price_text, detect_language
 
 
 @dataclass(frozen=True)
@@ -44,13 +44,7 @@ class MatinAICore:
             brand, model, service, model_year=model_year
         )
         if decision.needs_master:
-            response = (
-                "Контакты Мастера:\n"
-                "Для детального разбора поломки, проверки схем аппарата "
-                "и точного расчёта стоимости свяжитесь напрямую с мастером.\n"
-                "👉 Telegram: @MATIN_0893 @Coichi\n"
-                "Напишите модель устройства и что именно случилось"
-            )
+            response = MASTER_TEXT_BY_LANGUAGE.get(language, MASTER_TEXT_BY_LANGUAGE["ru"])
         else:
             response = customer_price_text(brand, model, service, decision.price_rub)
         return CoreDecision(AgentName.CUSTOMER, language, response, decision.needs_master)
