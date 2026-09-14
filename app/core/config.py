@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./matinfix.db"
     redis_url: str = "redis://localhost:6379/0"
     telegram_bot_token: str | None = None
+    telegram_workspace_id: str = "telegram-default"
     accountant_codeword: str = "NSS"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
