@@ -5,11 +5,15 @@ import logging
 import re
 
 from aiogram import Bot, Dispatcher, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
 from app.agents.core import MatinAICore
 from app.core.config import settings
+from app.crm.service import get_repair_history
+from app.db.models import Base
+from app.db.session import SessionLocal, engine
+from app.telegram.customer_service import create_customer_repair, list_customer_repairs
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -26,6 +30,15 @@ SERVICE_MARKERS = (
     "микрофон", "кнопк", "пароль", "аккаунт", "прошив", "пайк", "свар",
     "screen", "battery", "charging", "display", "repair", "replace",
 )
+STATUS_RU = {
+    "new": "Новый заказ",
+    "diagnostics": "Диагностика",
+    "waiting_part": "Ожидание детали",
+    "repairing": "Ремонт",
+    "ready": "Готов",
+    "issued": "Выдан",
+    "cancelled": "Отменён",
+}
 
 
 def _extract_request(text: str) -> tuple[str, str, str] | None:
@@ -57,13 +70,85 @@ def _extract_request(text: str) -> tuple[str, str, str] | None:
     return brand_match, model, service
 
 
+def _display_name(message: Message) -> str | None:
+    user = message.from_user
+    if user is None:
+        return None
+    return " ".join(part for part in (user.first_name, user.last_name) if part) or user.username
+
+
+def _telegram_user_id(message: Message) -> str:
+    if message.from_user is None:
+        raise RuntimeError("Telegram user is missing")
+    return str(message.from_user.id)
+
+
 @router.message(CommandStart())
 async def start(message: Message) -> None:
     await message.answer(
         "MATINFIX\n"
         "Напишите модель устройства и что нужно сделать.\n"
-        "Например: Realme C25s заменить дисплей"
+        "Например: Realme C25s заменить дисплей\n\n"
+        "/order — создать заказ в сервисе\n"
+        "/myorders — мои заказы"
     )
+
+
+@router.message(Command("order"))
+async def create_order(message: Message) -> None:
+    text = (message.text or "").split(maxsplit=1)
+    if len(text) != 2:
+        await message.answer("Использование: /order Realme C25s заменить дисплей")
+        return
+    request = _extract_request(text[1])
+    if request is None:
+        await message.answer("Укажите бренд, модель и неисправность. Например: /order Realme C25s заменить дисплей")
+        return
+
+    brand, model, service = request
+    decision = await core.handle_customer_price(brand, model, service)
+    if decision.needs_master:
+        await message.answer(decision.response)
+        return
+
+    async with SessionLocal() as session:
+        repair = await create_customer_repair(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            telegram_user_id=_telegram_user_id(message),
+            username=message.from_user.username if message.from_user else None,
+            display_name=_display_name(message),
+            brand=brand,
+            model=model,
+            problem=service,
+        )
+    await message.answer(
+        f"Заказ создан.\n"
+        f"📱 {brand} {model}\n"
+        f"🛠 {service}\n"
+        f"🆔 {repair.id[:8]}\n"
+        f"📌 {STATUS_RU.get(repair.status, repair.status)}"
+    )
+
+
+@router.message(Command("myorders"))
+async def my_orders(message: Message) -> None:
+    async with SessionLocal() as session:
+        repairs = await list_customer_repairs(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            telegram_user_id=_telegram_user_id(message),
+        )
+    if not repairs:
+        await message.answer("Заказов пока нет.")
+        return
+    lines = ["Мои заказы:"]
+    for repair in repairs:
+        lines.append(
+            f"🆔 {repair.id[:8]} · {repair.brand} {repair.model} · "
+            f"{STATUS_RU.get(repair.status, repair.status)}"
+        )
+    await message.answer("\n".join(lines))
 
 
 @router.message()
@@ -79,7 +164,8 @@ async def customer_message(message: Message) -> None:
     if request is None:
         await message.answer(
             "Напишите в формате: бренд, модель и что случилось.\n"
-            "Например: Realme C25s заменить дисплей"
+            "Например: Realme C25s заменить дисплей\n"
+            "Для создания заказа: /order Realme C25s заменить дисплей"
         )
         return
 
@@ -91,6 +177,8 @@ async def customer_message(message: Message) -> None:
 async def run() -> None:
     if not settings.telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
     bot = Bot(settings.telegram_bot_token)
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
@@ -99,6 +187,7 @@ async def run() -> None:
         await dispatcher.start_polling(bot)
     finally:
         await bot.session.close()
+        await engine.dispose()
 
 
 if __name__ == "__main__":
