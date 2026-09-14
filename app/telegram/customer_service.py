@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Customer, Repair, TelegramCustomer, Workspace, new_id
+from app.db.models import Customer, Repair, RepairStatusHistory, TelegramCustomer, Workspace, new_id
 
 
 async def ensure_workspace(session: AsyncSession, workspace_id: str) -> Workspace:
@@ -40,9 +40,7 @@ async def get_or_create_customer(
             await session.commit()
             return customer
 
-    customer = Customer(
-        id=new_id(), workspace_id=workspace_id, name=display_name,
-    )
+    customer = Customer(id=new_id(), workspace_id=workspace_id, name=display_name)
     session.add(customer)
     await session.flush()
     session.add(TelegramCustomer(
@@ -65,8 +63,6 @@ async def create_customer_repair(
     model: str,
     problem: str,
 ) -> Repair:
-    from app.crm.service import create_repair
-
     customer = await get_or_create_customer(
         session,
         workspace_id=workspace_id,
@@ -74,15 +70,18 @@ async def create_customer_repair(
         username=username,
         display_name=display_name,
     )
-    return await create_repair(
-        session,
-        workspace_id=workspace_id,
-        customer_name=customer.name,
-        customer_phone=customer.phone,
-        brand=brand,
-        model=model,
-        problem=problem,
+    repair = Repair(
+        id=new_id(), workspace_id=workspace_id, customer_id=customer.id,
+        brand=brand.strip(), model=model.strip(), problem=problem.strip(), status="new",
     )
+    session.add(repair)
+    session.add(RepairStatusHistory(
+        id=new_id(), workspace_id=workspace_id, repair_id=repair.id,
+        from_status=None, to_status="new",
+    ))
+    await session.commit()
+    await session.refresh(repair)
+    return repair
 
 
 async def list_customer_repairs(
