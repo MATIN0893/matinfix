@@ -132,6 +132,7 @@ async def help_command(message: Message) -> None:
         "/order Бренд Модель неисправность — создать заказ\n"
         "/myorders — показать мои заказы\n"
         "/status ID — узнать статус заказа\n"
+        "/history ID — история ремонта, комментарии и фото\n"
         "/start — начать заново\n\n"
         "Для предварительной цены просто напишите бренд, модель и неисправность."
     )
@@ -486,6 +487,45 @@ async def order_status(message: Message) -> None:
         f"🛠 {repair.problem}\n"
         f"📌 {STATUS_RU.get(repair.status, repair.status)}"
     )
+
+
+@router.message(Command("history"))
+async def customer_history(message: Message) -> None:
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].strip():
+        await message.answer("Использование: /history ID\nID можно взять из /myorders.")
+        return
+    async with SessionLocal() as session:
+        repair = await get_customer_repair(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            telegram_user_id=_telegram_user_id(message),
+            repair_reference=parts[1],
+        )
+        if repair is None:
+            await message.answer("Заказ не найден среди ваших заказов.")
+            return
+        history = await get_repair_history(
+            session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
+        )
+    if not history:
+        await message.answer(f"История заказа {repair.id[:8]} пока пуста.")
+        return
+    lines = [f"История заказа {repair.id[:8]}:"]
+    for item in history:
+        line = f"{item.from_status or '—'} → {item.to_status}"
+        if item.comment:
+            line += f"\nКомментарий: {item.comment}"
+        if item.photo_file_id:
+            line += "\n📷 Прикреплено фото"
+        lines.append(line)
+    await message.answer("\n\n".join(lines))
+    for item in history:
+        if item.photo_file_id:
+            await message.answer_photo(
+                item.photo_file_id,
+                caption=f"Фото к статусу {STATUS_RU.get(item.to_status, item.to_status)}",
+            )
 
 
 @router.message()
