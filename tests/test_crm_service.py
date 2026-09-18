@@ -107,6 +107,33 @@ async def test_status_history_keeps_comment_and_photo_reference(session) -> None
 
 
 @pytest.mark.asyncio
+async def test_note_is_saved_without_status_transition(session) -> None:
+    repair = await create_repair(
+        session,
+        workspace_id="workspace-a",
+        customer_name=None,
+        customer_phone=None,
+        brand="Apple",
+        model="iPhone 13",
+        problem="camera",
+    )
+
+    await change_repair_status(
+        session,
+        workspace_id="workspace-a",
+        repair_id=repair.id,
+        status="new",
+        comment="Фото корпуса добавлено",
+        photo_file_id="photo-456",
+    )
+
+    history = await get_repair_history(session, workspace_id="workspace-a", repair_id=repair.id)
+    assert history[-1].to_status == "new"
+    assert history[-1].comment == "Фото корпуса добавлено"
+    assert history[-1].photo_file_id == "photo-456"
+
+
+@pytest.mark.asyncio
 async def test_list_repairs_filters_by_status_and_workspace(session) -> None:
     first = await create_repair(
         session,

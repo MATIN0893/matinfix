@@ -39,6 +39,7 @@ def new_repair_keyboard(repair: Repair) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Открыть статус", url=public_repair_url(repair))],
+            [InlineKeyboardButton(text="Комментарий / фото", callback_data=f"repair_note:{repair.id}")],
             [InlineKeyboardButton(text=label, callback_data=f"repair_status:{repair.id}:{status}") for label, status in STATUS_BUTTONS[:2]],
             [InlineKeyboardButton(text=label, callback_data=f"repair_status:{repair.id}:{status}") for label, status in STATUS_BUTTONS[2:4]],
             [InlineKeyboardButton(text=label, callback_data=f"repair_status:{repair.id}:{status}") for label, status in STATUS_BUTTONS[4:]],

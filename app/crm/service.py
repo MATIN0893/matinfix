@@ -112,7 +112,7 @@ async def change_repair_status(
     if repair is None:
         return None
     previous_status = repair.status
-    if previous_status != status:
+    if previous_status != status or comment or photo_file_id:
         repair.status = status
         session.add(RepairStatusHistory(
             id=new_id(), workspace_id=workspace_id, repair_id=repair.id,

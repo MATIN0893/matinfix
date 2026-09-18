@@ -111,6 +111,7 @@ def _status_keyboard(repair_id: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Взять заказ", callback_data=f"repair_assign:{repair_id}"),
          InlineKeyboardButton(text="Карточка", callback_data=f"repair_card:{repair_id}"),
          InlineKeyboardButton(text="История", callback_data=f"repair_history:{repair_id}")],
+        [InlineKeyboardButton(text="Комментарий / фото", callback_data=f"repair_note:{repair_id}")],
         [InlineKeyboardButton(text="Диагностика", callback_data=f"repair_status:{repair_id}:diagnostics")],
         [InlineKeyboardButton(text="Ожидание детали", callback_data=f"repair_status:{repair_id}:waiting_part")],
         [InlineKeyboardButton(text="Ремонт", callback_data=f"repair_status:{repair_id}:repairing")],
@@ -512,6 +513,22 @@ async def repair_assign_callback(callback: CallbackQuery) -> None:
         await callback.message.answer(f"Заказ {assignment.repair_id[:8]} назначен вам.")
 
 
+@router.callback_query(lambda query: query.data and query.data.startswith("repair_note:"))
+async def repair_note_callback(callback: CallbackQuery) -> None:
+    if callback.from_user is None or str(callback.from_user.id) not in settings.master_telegram_ids:
+        await callback.answer("Команда доступна только мастеру.", show_alert=True)
+        return
+    repair_id = (callback.data or "").split(":", maxsplit=1)[1]
+    await callback.answer()
+    if callback.message is not None:
+        await callback.message.answer(
+            f"Для заказа {repair_id[:8]} отправьте:\n"
+            f"/note {repair_id[:8]} текст комментария\n\n"
+            "Или отправьте фото с подписью:\n"
+            f"/note {repair_id[:8]} что сделано на фото"
+        )
+
+
 @router.callback_query(lambda query: query.data and query.data.startswith("repair_card:"))
 async def repair_card_callback(callback: CallbackQuery) -> None:
     if callback.from_user is None or str(callback.from_user.id) not in settings.master_telegram_ids:
@@ -599,10 +616,17 @@ async def master_set_status(message: Message) -> None:
     await _handle_master_status(message)
 
 
+@router.message(Command("note"))
+async def master_add_note(message: Message) -> None:
+    await _handle_master_note(message)
+
+
 @router.message(F.photo)
 async def master_set_status_with_photo(message: Message) -> None:
     if (message.caption or "").strip().startswith("/setstatus"):
         await _handle_master_status(message)
+    elif (message.caption or "").strip().startswith("/note"):
+        await _handle_master_note(message)
 
 
 async def _handle_master_status(message: Message) -> None:
@@ -654,6 +678,40 @@ async def _handle_master_status(message: Message) -> None:
             f"📱 {repair.brand} {repair.model}\n"
             f"📌 {STATUS_RU.get(repair.status, repair.status)}",
         )
+
+
+async def _handle_master_note(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    command_text = message.text or message.caption or ""
+    parts = command_text.split(maxsplit=2)
+    photo_file_id = message.photo[-1].file_id if message.photo else None
+    if len(parts) < 3 and not photo_file_id:
+        await message.answer("Использование: /note ID комментарий. Для фото отправьте фото с этой подписью.")
+        return
+    comment = parts[2].strip() if len(parts) == 3 else None
+    async with SessionLocal() as session:
+        repairs = await session.scalars(
+            select(Repair).where(
+                Repair.workspace_id == settings.telegram_workspace_id,
+                Repair.id.startswith(parts[1].lower()),
+            ).limit(2)
+        )
+        matches = list(repairs.all())
+        if len(matches) != 1:
+            await message.answer("Заказ не найден или ID неоднозначен.")
+            return
+        repair = await change_repair_status(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            repair_id=matches[0].id,
+            status=matches[0].status,
+            comment=comment,
+            photo_file_id=photo_file_id,
+        )
+    suffix = " Фото сохранено." if photo_file_id else ""
+    await message.answer(f"Комментарий добавлен к заказу {repair.id[:8]}.{suffix}")
 
 
 @router.message(Command("order"))
