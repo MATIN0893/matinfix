@@ -1,8 +1,12 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.api.master import require_master_key
+from app.db.models import Base, RepairReview
+from app.db.session import get_session
 from app.main import app
 from app.notifications import (
     customer_status_keyboard,
@@ -111,3 +115,44 @@ async def test_master_api_rejects_invalid_key(monkeypatch: pytest.MonkeyPatch) -
 async def test_master_api_allows_request_with_valid_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "master_api_key", "test-secret")
     assert require_master_key("test-secret") is None
+
+
+@pytest.mark.asyncio
+async def test_public_review_flow_requires_approval(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_session():
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    monkeypatch.setattr(settings, "telegram_bot_token", "")
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            created = await client.post(
+                "/api/v1/crm/repairs",
+                json={"workspace_id": "telegram-default", "brand": "Apple", "model": "iPhone 13", "problem": "screen"},
+            )
+            assert created.status_code == 201
+            token = created.json()["public_token"]
+            blocked = await client.post(f"/api/v1/crm/public/repairs/{token}/review", json={"rating": 5, "comment": "Отлично"})
+            assert blocked.status_code == 400
+            await client.patch(
+                f"/api/v1/crm/repairs/{created.json()['id']}/status",
+                json={"workspace_id": "telegram-default", "status": "ready"},
+            )
+            submitted = await client.post(f"/api/v1/crm/public/repairs/{token}/review", json={"rating": 5, "comment": "Отлично"})
+            assert submitted.status_code == 201
+            assert (await client.get("/api/v1/crm/public/reviews?workspace_id=telegram-default")).json()["items"] == []
+        async with factory() as session:
+            review = await session.scalar(select(RepairReview))
+            review.approved = True
+            await session.commit()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            assert len((await client.get("/api/v1/crm/public/reviews?workspace_id=telegram-default")).json()["items"]) == 1
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
