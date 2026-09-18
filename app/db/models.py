@@ -60,6 +60,10 @@ class Repair(Base):
     model: Mapped[str] = mapped_column(String(128))
     problem: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32), default="new", index=True)
+    quoted_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    final_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payment_status: Mapped[str] = mapped_column(String(16), default="unpaid", index=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

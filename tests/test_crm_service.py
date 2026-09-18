@@ -14,6 +14,7 @@ from app.crm.service import (
 )
 from app.crm.analytics import daily_repair_stats
 from app.crm.inventory import reserve_part, upsert_inventory_part, use_part
+from app.crm.billing import mark_repair_paid, set_repair_price
 from app.db.models import Base, Workspace
 
 
@@ -254,3 +255,22 @@ async def test_inventory_rejects_reservation_above_available_stock(session) -> N
     assert refreshed.status == "waiting_part"
     history = await get_repair_history(session, workspace_id="workspace-a", repair_id=repair.id)
     assert "Нехватка детали BAT-IPH" in (history[-1].comment or "")
+
+
+@pytest.mark.asyncio
+async def test_repair_price_payment_and_revenue_are_recorded(session) -> None:
+    repair = await create_repair(
+        session, workspace_id="workspace-a", customer_name=None, customer_phone=None,
+        brand="Apple", model="iPhone", problem="display",
+    )
+    with pytest.raises(ValueError, match="set final price"):
+        await mark_repair_paid(session, workspace_id="workspace-a", repair_id=repair.id)
+    await set_repair_price(
+        session, workspace_id="workspace-a", repair_id=repair.id, final_price=4500
+    )
+    paid = await mark_repair_paid(session, workspace_id="workspace-a", repair_id=repair.id)
+    assert paid is not None
+    assert paid.payment_status == "paid"
+    assert paid.paid_at is not None
+    stats = await daily_repair_stats(session, workspace_id="workspace-a")
+    assert stats["paid_revenue_today"] == 4500

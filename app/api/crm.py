@@ -41,6 +41,10 @@ def repair_response(repair) -> dict:
         "model": repair.model,
         "problem": repair.problem,
         "status": repair.status,
+        "quoted_price": repair.quoted_price,
+        "final_price": repair.final_price,
+        "payment_status": repair.payment_status,
+        "paid_at": repair.paid_at,
         "created_at": repair.created_at,
     }
 

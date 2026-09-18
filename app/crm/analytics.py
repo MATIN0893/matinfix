@@ -45,6 +45,12 @@ async def daily_repair_stats(
         for item in histories
     )
     active_queue = sum(repair.status not in {"issued", "cancelled"} for repair in repairs)
+    paid_revenue_today = sum(
+        (repair.final_price or 0)
+        for repair in repairs
+        if repair.payment_status == "paid"
+        and (_as_utc(repair.paid_at) or current) >= day_start
+    )
 
     first_issued: dict[str, datetime] = {}
     for item in histories:
@@ -63,4 +69,5 @@ async def daily_repair_stats(
         "issued_today": issued_today,
         "active_queue": active_queue,
         "average_repair_hours": round(sum(durations) / len(durations), 1) if durations else 0.0,
+        "paid_revenue_today": paid_revenue_today,
     }

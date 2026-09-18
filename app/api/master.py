@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.master import MasterAI
 from app.core.config import settings
 from app.crm.inventory import list_inventory, reserve_part, restock_part, use_part
+from app.crm.billing import mark_repair_paid, set_repair_price
 from app.db.session import get_session
 
 router = APIRouter(prefix="/api/v1/master", tags=["master-ai"])
@@ -41,6 +42,18 @@ class InventoryRestockRequest(BaseModel):
 
 
 class InventoryRepairRequest(InventoryRestockRequest):
+    repair_id: str = Field(min_length=1, max_length=36)
+
+
+class RepairPriceRequest(BaseModel):
+    workspace_id: str = Field(min_length=1, max_length=36)
+    repair_id: str = Field(min_length=1, max_length=36)
+    final_price: int = Field(ge=0, le=100000000)
+    quoted_price: int | None = Field(default=None, ge=0, le=100000000)
+
+
+class RepairPaymentRequest(BaseModel):
+    workspace_id: str = Field(min_length=1, max_length=36)
     repair_id: str = Field(min_length=1, max_length=36)
 
 
@@ -122,3 +135,26 @@ async def master_use(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"sku": part.sku, "quantity": part.quantity, "used_quantity": usage.used_quantity}
+
+
+@router.post("/billing/price", dependencies=[Depends(require_master_key)])
+async def master_set_price(
+    request: RepairPriceRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
+    repair = await set_repair_price(session, **request.model_dump())
+    if repair is None:
+        raise HTTPException(status_code=404, detail="repair order not found")
+    return {"repair_id": repair.id, "final_price": repair.final_price, "payment_status": repair.payment_status}
+
+
+@router.post("/billing/paid", dependencies=[Depends(require_master_key)])
+async def master_mark_paid(
+    request: RepairPaymentRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
+    try:
+        repair = await mark_repair_paid(session, **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if repair is None:
+        raise HTTPException(status_code=404, detail="repair order not found")
+    return {"repair_id": repair.id, "final_price": repair.final_price, "payment_status": repair.payment_status}

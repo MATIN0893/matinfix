@@ -240,7 +240,8 @@ async def menu_master_stats(message: Message) -> None:
         f"Новых заказов: {stats['created_today']}\n"
         f"Выдано ремонтов: {stats['issued_today']}\n"
         f"Активная очередь: {stats['active_queue']}\n"
-        f"Среднее время ремонта: {stats['average_repair_hours']} ч."
+        f"Среднее время ремонта: {stats['average_repair_hours']} ч.\n"
+        f"Оплачено сегодня: {stats['paid_revenue_today']} ₽"
     )
 
 
@@ -264,7 +265,9 @@ async def help_command(message: Message) -> None:
             "/stock — остатки деталей\n"
             "/restock SKU QTY — пополнить остаток\n"
             "/reservepart ID SKU [QTY] — зарезервировать деталь\n"
-            "/usepart ID SKU [QTY] — списать установленную деталь"
+            "/usepart ID SKU [QTY] — списать установленную деталь\n"
+            "/setprice ID PRICE — установить итоговую цену\n"
+            "/paid ID — отметить оплату"
         )
 
 
@@ -351,6 +354,55 @@ async def master_reserve_part(message: Message) -> None:
 @router.message(Command("usepart"))
 async def master_use_part(message: Message) -> None:
     await _handle_part_command(message, action="usepart")
+
+
+@router.message(Command("setprice"))
+async def master_set_price(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 3:
+        await message.answer("Использование: /setprice ID PRICE")
+        return
+    try:
+        from app.crm.billing import set_repair_price
+        async with SessionLocal() as session:
+            repair = await set_repair_price(
+                session, workspace_id=settings.telegram_workspace_id,
+                repair_id=parts[1], final_price=int(parts[2]),
+            )
+    except (ValueError, TypeError) as exc:
+        await message.answer(f"Цена не установлена: {exc}")
+        return
+    if repair is None:
+        await message.answer("Заказ не найден.")
+        return
+    await message.answer(f"Заказ {repair.id[:8]}: итоговая цена {repair.final_price} ₽.")
+
+
+@router.message(Command("paid"))
+async def master_mark_paid(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 2:
+        await message.answer("Использование: /paid ID")
+        return
+    try:
+        from app.crm.billing import mark_repair_paid
+        async with SessionLocal() as session:
+            repair = await mark_repair_paid(
+                session, workspace_id=settings.telegram_workspace_id, repair_id=parts[1]
+            )
+    except (ValueError, TypeError) as exc:
+        await message.answer(f"Оплата не отмечена: {exc}")
+        return
+    if repair is None:
+        await message.answer("Заказ не найден.")
+        return
+    await message.answer(f"Заказ {repair.id[:8]} отмечен как оплаченный: {repair.final_price} ₽.")
 
 
 @router.message(Command("orders"))
