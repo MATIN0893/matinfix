@@ -430,6 +430,9 @@ async def master_set_price(message: Message) -> None:
                 session, workspace_id=settings.telegram_workspace_id,
                 repair_id=parts[1], final_price=int(parts[2]),
             )
+            customer_telegram_id = None if repair is None else await get_repair_telegram_user_id(
+                session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
+            )
     except (ValueError, TypeError) as exc:
         await message.answer(f"Цена не установлена: {exc}")
         return
@@ -437,6 +440,11 @@ async def master_set_price(message: Message) -> None:
         await message.answer("Заказ не найден.")
         return
     await message.answer(f"Заказ {repair.id[:8]}: итоговая цена {repair.final_price} ₽.")
+    if customer_telegram_id:
+        await message.bot.send_message(
+            customer_telegram_id,
+            f"По заказу {repair.id[:8]} установлена итоговая цена: {repair.final_price} ₽.",
+        )
 
 
 @router.message(Command("paid"))
@@ -454,6 +462,9 @@ async def master_mark_paid(message: Message) -> None:
             repair = await mark_repair_paid(
                 session, workspace_id=settings.telegram_workspace_id, repair_id=parts[1]
             )
+            customer_telegram_id = None if repair is None else await get_repair_telegram_user_id(
+                session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
+            )
     except (ValueError, TypeError) as exc:
         await message.answer(f"Оплата не отмечена: {exc}")
         return
@@ -461,6 +472,11 @@ async def master_mark_paid(message: Message) -> None:
         await message.answer("Заказ не найден.")
         return
     await message.answer(f"Заказ {repair.id[:8]} отмечен как оплаченный: {repair.final_price} ₽.")
+    if customer_telegram_id:
+        await message.bot.send_message(
+            customer_telegram_id,
+            f"Оплата по заказу {repair.id[:8]} подтверждена: {repair.final_price} ₽.",
+        )
 
 
 @router.message(Command("orders"))
@@ -639,6 +655,8 @@ async def repair_card_callback(callback: CallbackQuery) -> None:
             f"📱 {repair.brand} {repair.model}\n"
             f"🛠 {repair.problem}\n"
             f"📌 {STATUS_RU.get(repair.status, repair.status)}\n"
+            f"💰 Цена: {repair.final_price or repair.quoted_price or 'уточняется'} ₽\n"
+            f"💳 Оплата: {'оплачено' if repair.payment_status == 'paid' else 'не оплачено'}\n"
             f"👤 Мастер: {master_text}"
         )
 
@@ -892,7 +910,9 @@ async def order_status(message: Message) -> None:
         f"Заказ {repair.id[:8]}\n"
         f"📱 {repair.brand} {repair.model}\n"
         f"🛠 {repair.problem}\n"
-        f"📌 {STATUS_RU.get(repair.status, repair.status)}"
+        f"📌 {STATUS_RU.get(repair.status, repair.status)}\n"
+        f"💰 Цена: {repair.final_price or repair.quoted_price or 'уточняется'} ₽\n"
+        f"💳 Оплата: {'оплачено' if repair.payment_status == 'paid' else 'не оплачено'}"
     )
 
 
