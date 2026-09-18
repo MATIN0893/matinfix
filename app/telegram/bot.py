@@ -25,7 +25,7 @@ from app.crm.service import (
     get_repair_assignment,
     get_repair_history,
 )
-from app.crm.reviews import list_reviews, review_stats
+from app.crm.reviews import list_reviews, review_stats, set_review_approval
 from app.db.models import Base, Repair, RepairAssignment
 from app.db.session import SessionLocal, engine
 from app.notifications import notify_customer_status_changed
@@ -473,6 +473,32 @@ async def _show_master_orders(message: Message, status_filter: str | None = None
                 reply_markup=_status_keyboard(repair.id),
             )
     await message.answer("\n".join(lines))
+
+
+async def _moderate_review(callback: CallbackQuery, approved: bool) -> None:
+    if callback.from_user is None or str(callback.from_user.id) not in settings.master_telegram_ids:
+        await callback.answer("Команда доступна только мастеру.", show_alert=True)
+        return
+    review_id = (callback.data or "").split(":", maxsplit=1)[1]
+    async with SessionLocal() as session:
+        review = await set_review_approval(session, review_id=review_id, approved=approved)
+    if review is None:
+        await callback.answer("Отзыв не найден.", show_alert=True)
+        return
+    await callback.answer("Отзыв опубликован." if approved else "Отзыв скрыт.")
+    if callback.message is not None:
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer("Отзыв опубликован на сайте." if approved else "Отзыв скрыт и не показывается на сайте.")
+
+
+@router.callback_query(lambda query: query.data and query.data.startswith("review_approve:"))
+async def review_approve_callback(callback: CallbackQuery) -> None:
+    await _moderate_review(callback, True)
+
+
+@router.callback_query(lambda query: query.data and query.data.startswith("review_reject:"))
+async def review_reject_callback(callback: CallbackQuery) -> None:
+    await _moderate_review(callback, False)
 
 
 @router.callback_query(lambda query: query.data and query.data.startswith("repair_status:"))

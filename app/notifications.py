@@ -86,6 +86,18 @@ def review_message(repair: Repair, review: RepairReview) -> str:
     return text
 
 
+def review_moderation_keyboard(review: RepairReview) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Опубликовать", callback_data=f"review_approve:{review.id}"),
+                InlineKeyboardButton(text="🗑 Скрыть", callback_data=f"review_reject:{review.id}"),
+            ],
+            [InlineKeyboardButton(text="Открыть заказ", callback_data=f"repair_card:{review.repair_id}")],
+        ]
+    )
+
+
 async def notify_masters_about_review(repair: Repair, review: RepairReview) -> None:
     if not settings.telegram_bot_token or not settings.master_telegram_ids:
         return
@@ -96,7 +108,7 @@ async def notify_masters_about_review(repair: Repair, review: RepairReview) -> N
                 await bot.send_message(
                     chat_id=telegram_user_id,
                     text=review_message(repair, review),
-                    reply_markup=customer_status_keyboard(repair),
+                    reply_markup=review_moderation_keyboard(review),
                 )
     finally:
         await bot.session.close()

@@ -162,7 +162,10 @@ async def test_review_stats_and_recent_reviews(session) -> None:
         brand="Samsung", model="A1", problem="battery",
     )
     await change_repair_status(session, workspace_id="workspace-a", repair_id=repair.id, status="issued")
-    await create_review(session, repair=repair, rating=4, comment="Хорошо")
+    review = await create_review(session, repair=repair, rating=4, comment="Хорошо")
+    assert review.approved is False
+    review.approved = True
+    await session.commit()
     count, average = await review_stats(session, workspace_id="workspace-a")
     recent = await list_reviews(session, workspace_id="workspace-a")
     assert (count, average) == (1, 4.0)

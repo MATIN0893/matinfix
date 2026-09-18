@@ -40,12 +40,15 @@ async def create_review(
 
 
 async def list_reviews(
-    session: AsyncSession, *, workspace_id: str, limit: int = 10
+    session: AsyncSession, *, workspace_id: str, limit: int = 10, approved_only: bool = True
 ) -> list[tuple[RepairReview, Repair]]:
+    conditions = [RepairReview.workspace_id == workspace_id]
+    if approved_only:
+        conditions.append(RepairReview.approved.is_(True))
     result = await session.execute(
         select(RepairReview, Repair)
         .join(Repair, Repair.id == RepairReview.repair_id)
-        .where(RepairReview.workspace_id == workspace_id)
+        .where(*conditions)
         .order_by(RepairReview.created_at.desc(), RepairReview.id.desc())
         .limit(limit)
     )
@@ -55,8 +58,21 @@ async def list_reviews(
 async def review_stats(session: AsyncSession, *, workspace_id: str) -> tuple[int, float]:
     result = await session.execute(
         select(func.count(RepairReview.id), func.avg(RepairReview.rating)).where(
-            RepairReview.workspace_id == workspace_id
+            RepairReview.workspace_id == workspace_id,
+            RepairReview.approved.is_(True),
         )
     )
     count, average = result.one()
     return int(count or 0), float(average or 0)
+
+
+async def set_review_approval(
+    session: AsyncSession, *, review_id: str, approved: bool
+) -> RepairReview | None:
+    review = await session.get(RepairReview, review_id)
+    if review is None:
+        return None
+    review.approved = approved
+    await session.commit()
+    await session.refresh(review)
+    return review
