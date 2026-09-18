@@ -12,7 +12,7 @@ from app.crm.service import (
     get_repair_history,
     list_repairs,
 )
-from app.crm.reviews import create_review, get_review_by_repair, review_stats
+from app.crm.reviews import create_review, get_review_by_repair, list_reviews, review_stats
 from app.db.session import get_session
 from app.notifications import (
     notify_customer_status_changed,
@@ -153,6 +153,28 @@ async def get_public_review_summary(
 ) -> dict:
     count, average = await review_stats(session, workspace_id=workspace_id)
     return {"count": count, "average": round(average, 1)}
+
+
+@router.get("/public/reviews")
+async def get_public_reviews(
+    workspace_id: str = Query(default="telegram-default", min_length=1, max_length=36),
+    limit: int = Query(default=6, ge=1, le=12),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    reviews = await list_reviews(session, workspace_id=workspace_id, limit=limit)
+    return {
+        "items": [
+            {
+                "rating": review.rating,
+                "comment": review.comment,
+                "brand": repair.brand,
+                "model": repair.model,
+                "created_at": review.created_at,
+            }
+            for review, repair in reviews
+            if review.comment
+        ]
+    }
 
 
 @router.post("/public/repairs/{public_token}/review", status_code=201)
