@@ -117,7 +117,7 @@ async def help_command(message: Message) -> None:
     if _is_master(message):
         await message.answer(
             "Мастерские команды:\n"
-            "/orders — список заказов\n"
+            "/orders [STATUS] — список заказов или фильтр по статусу\n"
             "/setstatus ID STATUS — изменить статус"
         )
 
@@ -127,14 +127,29 @@ async def master_orders(message: Message) -> None:
     if not _is_master(message):
         await message.answer("Команда доступна только мастеру.")
         return
+    parts = (message.text or "").split(maxsplit=1)
+    status_filter = parts[1].strip() if len(parts) == 2 else None
+    if status_filter and status_filter not in VALID_STATUSES:
+        await message.answer(
+            "Неизвестный статус. Доступные статусы: "
+            f"{', '.join(sorted(VALID_STATUSES))}"
+        )
+        return
     async with SessionLocal() as session:
         from app.crm.service import list_repairs
-        repairs = await list_repairs(session, workspace_id=settings.telegram_workspace_id, limit=20)
+        repairs = await list_repairs(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            status=status_filter,
+            limit=20,
+        )
     if not repairs:
-        await message.answer("Заказов пока нет.")
+        suffix = f" со статусом {status_filter}" if status_filter else ""
+        await message.answer(f"Заказов{suffix} пока нет.")
         return
+    title = f"Заказы: {status_filter}" if status_filter else "Все заказы"
     await message.answer("\n".join(
-        ["Все заказы:"] + [
+        [title + ":"] + [
             f"{repair.id[:8]} · {repair.brand} {repair.model} · {STATUS_RU.get(repair.status, repair.status)}"
             for repair in repairs
         ]
