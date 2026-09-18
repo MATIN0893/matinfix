@@ -113,6 +113,9 @@ def test_master_status_keyboard_contains_all_operational_statuses() -> None:
     keyboard = _status_keyboard("repair-123")
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
 
+    assert "repair_assign:repair-123" in callbacks
+    assert "repair_card:repair-123" in callbacks
+    assert "repair_history:repair-123" in callbacks
     assert "repair_status:repair-123:diagnostics" in callbacks
     assert "repair_status:repair-123:waiting_part" in callbacks
     assert "repair_status:repair-123:repairing" in callbacks

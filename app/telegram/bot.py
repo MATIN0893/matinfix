@@ -101,6 +101,9 @@ def _telegram_user_id(message: Message) -> str:
 
 def _status_keyboard(repair_id: str) -> InlineKeyboardMarkup:
     rows = [
+        [InlineKeyboardButton(text="Взять заказ", callback_data=f"repair_assign:{repair_id}"),
+         InlineKeyboardButton(text="Карточка", callback_data=f"repair_card:{repair_id}"),
+         InlineKeyboardButton(text="История", callback_data=f"repair_history:{repair_id}")],
         [InlineKeyboardButton(text="Диагностика", callback_data=f"repair_status:{repair_id}:diagnostics")],
         [InlineKeyboardButton(text="Ожидание детали", callback_data=f"repair_status:{repair_id}:waiting_part")],
         [InlineKeyboardButton(text="Ремонт", callback_data=f"repair_status:{repair_id}:repairing")],
@@ -162,10 +165,10 @@ async def master_orders(message: Message) -> None:
             status=status_filter,
             limit=20,
         )
-    if not repairs:
-        suffix = f" со статусом {status_filter}" if status_filter else ""
-        await message.answer(f"Заказов{suffix} пока нет.")
-        return
+        if not repairs:
+            suffix = f" со статусом {status_filter}" if status_filter else ""
+            await message.answer(f"Заказов{suffix} пока нет.")
+            return
         title = f"Заказы: {status_filter}" if status_filter else "Все заказы"
         lines = [title + ":"]
         for repair in repairs:
@@ -220,6 +223,76 @@ async def repair_status_callback(callback: CallbackQuery) -> None:
             f"📱 {repair.brand} {repair.model}\n"
             f"📌 {STATUS_RU.get(repair.status, repair.status)}",
         )
+
+
+@router.callback_query(lambda query: query.data and query.data.startswith("repair_assign:"))
+async def repair_assign_callback(callback: CallbackQuery) -> None:
+    if callback.from_user is None or str(callback.from_user.id) not in settings.master_telegram_ids:
+        await callback.answer("Команда доступна только мастеру.", show_alert=True)
+        return
+    repair_id = (callback.data or "").split(":", maxsplit=1)[1]
+    async with SessionLocal() as session:
+        repair = await session.get(Repair, repair_id)
+        if repair is None or repair.workspace_id != settings.telegram_workspace_id:
+            await callback.answer("Заказ не найден.", show_alert=True)
+            return
+        assignment = await assign_repair_to_master(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            repair_id=repair.id,
+            telegram_user_id=str(callback.from_user.id),
+            display_name=callback.from_user.full_name or "Мастер",
+        )
+    await callback.answer("Заказ назначен вам.")
+    if callback.message is not None and assignment is not None:
+        await callback.message.answer(f"Заказ {assignment.repair_id[:8]} назначен вам.")
+
+
+@router.callback_query(lambda query: query.data and query.data.startswith("repair_card:"))
+async def repair_card_callback(callback: CallbackQuery) -> None:
+    if callback.from_user is None or str(callback.from_user.id) not in settings.master_telegram_ids:
+        await callback.answer("Команда доступна только мастеру.", show_alert=True)
+        return
+    repair_id = (callback.data or "").split(":", maxsplit=1)[1]
+    async with SessionLocal() as session:
+        repair = await session.get(Repair, repair_id)
+        if repair is None or repair.workspace_id != settings.telegram_workspace_id:
+            await callback.answer("Заказ не найден.", show_alert=True)
+            return
+        assignment = await get_repair_assignment(
+            session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
+        )
+    await callback.answer()
+    master_text = assignment[1].display_name if assignment else "не назначен"
+    if callback.message is not None:
+        await callback.message.answer(
+            f"Карточка заказа {repair.id[:8]}\n"
+            f"📱 {repair.brand} {repair.model}\n"
+            f"🛠 {repair.problem}\n"
+            f"📌 {STATUS_RU.get(repair.status, repair.status)}\n"
+            f"👤 Мастер: {master_text}"
+        )
+
+
+@router.callback_query(lambda query: query.data and query.data.startswith("repair_history:"))
+async def repair_history_callback(callback: CallbackQuery) -> None:
+    if callback.from_user is None or str(callback.from_user.id) not in settings.master_telegram_ids:
+        await callback.answer("Команда доступна только мастеру.", show_alert=True)
+        return
+    repair_id = (callback.data or "").split(":", maxsplit=1)[1]
+    async with SessionLocal() as session:
+        repair = await session.get(Repair, repair_id)
+        if repair is None or repair.workspace_id != settings.telegram_workspace_id:
+            await callback.answer("Заказ не найден.", show_alert=True)
+            return
+        history = await get_repair_history(
+            session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
+        )
+    await callback.answer()
+    if callback.message is not None:
+        lines = [f"История заказа {repair.id[:8]}:"]
+        lines.extend(f"{item.from_status or '—'} → {item.to_status}" for item in history)
+        await callback.message.answer("\n".join(lines))
 
 
 @router.message(Command("assign"))
