@@ -25,7 +25,7 @@ from app.crm.service import (
     get_repair_assignment,
     get_repair_history,
 )
-from app.db.models import Base, Repair
+from app.db.models import Base, Repair, RepairAssignment
 from app.db.session import SessionLocal, engine
 from app.telegram.customer_service import (
     create_customer_repair,
@@ -132,15 +132,28 @@ def _customer_menu() -> ReplyKeyboardMarkup:
     )
 
 
+def _master_menu() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📋 Все заказы"), KeyboardButton(text="🆕 Новые")],
+            [KeyboardButton(text="🔧 В ремонте"), KeyboardButton(text="✅ Готовые")],
+            [KeyboardButton(text="👤 Мои заказы"), KeyboardButton(text="📊 Статистика")],
+            [KeyboardButton(text="ℹ️ Помощь")],
+        ],
+        resize_keyboard=True,
+    )
+
+
 @router.message(CommandStart())
 async def start(message: Message) -> None:
+    menu = _master_menu() if _is_master(message) else _customer_menu()
     await message.answer(
         "MATINFIX\n"
         "Напишите модель устройства и что нужно сделать.\n"
         "Например: Realme C25s заменить дисплей\n\n"
         "/order — создать заказ в сервисе\n"
         "/myorders — мои заказы",
-        reply_markup=_customer_menu(),
+        reply_markup=menu,
     )
 
 
@@ -162,6 +175,74 @@ async def menu_history(message: Message) -> None:
 @router.message(F.text == "ℹ️ Помощь")
 async def menu_help(message: Message) -> None:
     await help_command(message)
+
+
+@router.message(F.text == "📋 Все заказы")
+async def menu_all_orders(message: Message) -> None:
+    await _show_master_orders(message)
+
+
+@router.message(F.text == "🆕 Новые")
+async def menu_new_orders(message: Message) -> None:
+    await _show_master_orders(message, "new")
+
+
+@router.message(F.text == "🔧 В ремонте")
+async def menu_repairing_orders(message: Message) -> None:
+    await _show_master_orders(message, "repairing")
+
+
+@router.message(F.text == "✅ Готовые")
+async def menu_ready_orders(message: Message) -> None:
+    await _show_master_orders(message, "ready")
+
+
+@router.message(F.text == "👤 Мои заказы")
+async def menu_my_master_orders(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    from app.db.models import Master
+    async with SessionLocal() as session:
+        master = await session.scalar(select(Master).where(
+            Master.workspace_id == settings.telegram_workspace_id,
+            Master.telegram_user_id == _telegram_user_id(message),
+        ))
+        repairs = [] if master is None else list((await session.scalars(
+            select(Repair)
+            .join(RepairAssignment, RepairAssignment.repair_id == Repair.id)
+            .where(
+                Repair.workspace_id == settings.telegram_workspace_id,
+                RepairAssignment.workspace_id == settings.telegram_workspace_id,
+                RepairAssignment.master_id == master.id,
+            ).limit(20)
+        )).all())
+    if not repairs:
+        await message.answer("На вас пока нет назначенных заказов.")
+        return
+    await message.answer("Мои назначенные заказы:\n" + "\n".join(
+        f"{repair.id[:8]} · {repair.brand} {repair.model} · {STATUS_RU.get(repair.status, repair.status)}"
+        for repair in repairs
+    ))
+
+
+@router.message(F.text == "📊 Статистика")
+async def menu_master_stats(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    async with SessionLocal() as session:
+        from app.crm.service import list_repairs
+        repairs = await list_repairs(session, workspace_id=settings.telegram_workspace_id, limit=100)
+    counts = {status: sum(repair.status == status for repair in repairs) for status in VALID_STATUSES}
+    await message.answer(
+        "Статистика заказов:\n"
+        f"Всего: {len(repairs)}\n"
+        f"Новые: {counts['new']}\n"
+        f"В ремонте: {counts['repairing']}\n"
+        f"Готовые: {counts['ready']}\n"
+        f"Выданные: {counts['issued']}"
+    )
 
 
 @router.message(Command("help"))
@@ -186,11 +267,14 @@ async def help_command(message: Message) -> None:
 
 @router.message(Command("orders"))
 async def master_orders(message: Message) -> None:
+    parts = (message.text or "").split(maxsplit=1)
+    await _show_master_orders(message, parts[1].strip() if len(parts) == 2 else None)
+
+
+async def _show_master_orders(message: Message, status_filter: str | None = None) -> None:
     if not _is_master(message):
         await message.answer("Команда доступна только мастеру.")
         return
-    parts = (message.text or "").split(maxsplit=1)
-    status_filter = parts[1].strip() if len(parts) == 2 else None
     if status_filter and status_filter not in VALID_STATUSES:
         await message.answer(
             "Неизвестный статус. Доступные статусы: "

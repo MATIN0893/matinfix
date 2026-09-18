@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.models import Base, Workspace
-from app.telegram.bot import _customer_menu, _status_keyboard
+from app.telegram.bot import _customer_menu, _master_menu, _status_keyboard
 from app.telegram.customer_service import (
     create_customer_repair,
     get_customer_repair,
@@ -132,5 +132,19 @@ def test_customer_menu_contains_main_actions() -> None:
         "📦 Мои заказы",
         "🔎 Статус заказа",
         "📜 История заказа",
+        "ℹ️ Помощь",
+    ]
+
+
+def test_master_menu_contains_work_queue_actions() -> None:
+    labels = [button.text for row in _master_menu().keyboard for button in row]
+
+    assert labels == [
+        "📋 Все заказы",
+        "🆕 Новые",
+        "🔧 В ремонте",
+        "✅ Готовые",
+        "👤 Мои заказы",
+        "📊 Статистика",
         "ℹ️ Помощь",
     ]
