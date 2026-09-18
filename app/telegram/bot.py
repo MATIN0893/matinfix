@@ -25,6 +25,7 @@ from app.crm.service import (
     get_repair_assignment,
     get_repair_history,
 )
+from app.crm.reviews import list_reviews, review_stats
 from app.db.models import Base, Repair, RepairAssignment
 from app.db.session import SessionLocal, engine
 from app.notifications import notify_customer_status_changed
@@ -140,6 +141,7 @@ def _master_menu() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📋 Все заказы"), KeyboardButton(text="🆕 Новые")],
             [KeyboardButton(text="🔧 В ремонте"), KeyboardButton(text="✅ Готовые")],
             [KeyboardButton(text="👤 Мои заказы"), KeyboardButton(text="📊 Статистика")],
+            [KeyboardButton(text="⭐ Отзывы")],
             [KeyboardButton(text="📦 Склад")],
             [KeyboardButton(text="ℹ️ Помощь")],
         ],
@@ -245,6 +247,25 @@ async def menu_master_stats(message: Message) -> None:
         f"Среднее время ремонта: {stats['average_repair_hours']} ч.\n"
         f"Оплачено сегодня: {stats['paid_revenue_today']} ₽"
     )
+
+
+@router.message(F.text == "⭐ Отзывы")
+async def menu_master_reviews(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    async with SessionLocal() as session:
+        count, average = await review_stats(session, workspace_id=settings.telegram_workspace_id)
+        reviews = await list_reviews(session, workspace_id=settings.telegram_workspace_id, limit=8)
+    if not reviews:
+        await message.answer("Отзывов пока нет.")
+        return
+    lines = [f"Отзывы клиентов\nСредняя оценка: {average:.1f}/5 ({count})\n"]
+    for review, repair in reviews:
+        stars = "★" * review.rating + "☆" * (5 - review.rating)
+        comment = f" — {review.comment}" if review.comment else ""
+        lines.append(f"{stars} · {repair.brand} {repair.model}{comment}")
+    await message.answer("\n".join(lines))
 
 
 @router.message(Command("help"))

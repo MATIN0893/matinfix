@@ -13,7 +13,7 @@ from app.crm.service import (
     get_repair_history,
     list_repairs,
 )
-from app.crm.reviews import create_review, get_review_by_repair
+from app.crm.reviews import create_review, get_review_by_repair, list_reviews, review_stats
 from app.crm.analytics import daily_repair_stats
 from app.crm.inventory import reserve_part, upsert_inventory_part, use_part
 from app.crm.billing import mark_repair_paid, set_repair_price
@@ -153,6 +153,20 @@ async def test_review_requires_final_status_and_is_unique(session) -> None:
     assert await get_review_by_repair(session, repair_id=repair.id) is review
     with pytest.raises(ValueError, match="already exists"):
         await create_review(session, repair=repair, rating=4, comment="Повтор")
+
+
+@pytest.mark.asyncio
+async def test_review_stats_and_recent_reviews(session) -> None:
+    repair = await create_repair(
+        session, workspace_id="workspace-a", customer_name=None, customer_phone=None,
+        brand="Samsung", model="A1", problem="battery",
+    )
+    await change_repair_status(session, workspace_id="workspace-a", repair_id=repair.id, status="issued")
+    await create_review(session, repair=repair, rating=4, comment="Хорошо")
+    count, average = await review_stats(session, workspace_id="workspace-a")
+    recent = await list_reviews(session, workspace_id="workspace-a")
+    assert (count, average) == (1, 4.0)
+    assert recent[0][1].model == "A1"
 
 
 @pytest.mark.asyncio

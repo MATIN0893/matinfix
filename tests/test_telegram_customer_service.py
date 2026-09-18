@@ -146,6 +146,7 @@ def test_master_menu_contains_work_queue_actions() -> None:
         "✅ Готовые",
         "👤 Мои заказы",
         "📊 Статистика",
+        "⭐ Отзывы",
         "📦 Склад",
         "ℹ️ Помощь",
     ]
