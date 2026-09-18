@@ -13,6 +13,7 @@ from app.crm.service import (
     list_repairs,
 )
 from app.db.session import get_session
+from app.notifications import notify_masters_about_new_repair
 
 router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
 
@@ -83,6 +84,7 @@ async def create_repair_order(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     repair = await create_repair(session, **request.model_dump())
+    await notify_masters_about_new_repair(repair)
     return repair_response(repair)
 
 

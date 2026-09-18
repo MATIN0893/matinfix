@@ -4,6 +4,7 @@ from httpx import ASGITransport, AsyncClient
 from app.core.config import settings
 from app.api.master import require_master_key
 from app.main import app
+from app.notifications import new_repair_message, public_repair_url
 
 
 @pytest.mark.asyncio
@@ -27,6 +28,19 @@ async def test_website_cors_preflight() -> None:
         )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://matinfix-dtceinuc.manus.space"
+
+
+def test_new_repair_notification_contains_public_link_data() -> None:
+    class RepairStub:
+        id = "12345678-aaaa-bbbb-cccc-dddddddddddd"
+        public_token = "public-token"
+        brand = "Xiaomi"
+        model = "Redmi Note"
+        problem = "Замена дисплея"
+
+    repair = RepairStub()
+    assert "Xiaomi Redmi Note" in new_repair_message(repair)
+    assert public_repair_url(repair).endswith("/?order=public-token")
 
 
 @pytest.mark.asyncio

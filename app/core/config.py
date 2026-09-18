@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     master_api_key: str | None = None
     master_telegram_user_ids: str = ""
     cors_origins: str = "https://matinfix-dtceinuc.manus.space,http://localhost:3000"
+    public_web_url: str = "https://matinfix-dtceinuc.manus.space"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
