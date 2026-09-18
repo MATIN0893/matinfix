@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_workspace_id: str = "telegram-default"
     accountant_codeword: str = "NSS"
+    master_api_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -19,9 +20,11 @@ class Settings(BaseSettings):
         """Return a driver URL SQLAlchemy can use in async mode."""
         url = self.database_url
         if url.startswith("postgres://"):
-            return "postgresql+asyncpg://" + url[len("postgres://") :]
+            url = "postgresql+asyncpg://" + url[len("postgres://") :]
+            return url + ("&" if "?" in url else "?") + "ssl=require"
         if url.startswith("postgresql://"):
-            return "postgresql+asyncpg://" + url[len("postgresql://") :]
+            url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+            return url + ("&" if "?" in url else "?") + "ssl=require"
         return url
 
 

@@ -1,12 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.agents.master import MasterAI
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/v1/master", tags=["master-ai"])
 master_ai = MasterAI()
+
+
+def require_master_key(x_master_key: str | None = Header(default=None)) -> None:
+    """Require a shared key whenever one is configured."""
+    if settings.master_api_key and x_master_key != settings.master_api_key:
+        raise HTTPException(status_code=401, detail="invalid master api key")
 
 
 class MasterOrderRequest(BaseModel):
@@ -24,7 +31,7 @@ class MasterStatusRequest(BaseModel):
     status: str = Field(min_length=1, max_length=32)
 
 
-@router.post("/orders", status_code=201)
+@router.post("/orders", status_code=201, dependencies=[Depends(require_master_key)])
 async def master_create_order(request: MasterOrderRequest) -> dict:
     decision = await master_ai.create_order(**request.model_dump())
     return {
@@ -35,7 +42,7 @@ async def master_create_order(request: MasterOrderRequest) -> dict:
     }
 
 
-@router.patch("/orders/status")
+@router.patch("/orders/status", dependencies=[Depends(require_master_key)])
 async def master_set_status(request: MasterStatusRequest) -> dict:
     try:
         decision = await master_ai.set_status(
