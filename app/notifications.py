@@ -73,6 +73,20 @@ def customer_status_keyboard(repair: Repair) -> InlineKeyboardMarkup:
     )
 
 
+def customer_review_keyboard(repair: Repair) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="⭐ Оценить ремонт", url=public_repair_url(repair))]]
+    )
+
+
+def customer_review_message(repair: Repair) -> str:
+    return (
+        f"Как вам ремонт заказа {repair.id[:8]}?\n"
+        f"📱 {repair.brand} {repair.model}\n\n"
+        "Заказ завершён. Оцените качество работы и оставьте комментарий — это займёт меньше минуты."
+    )
+
+
 def review_message(repair: Repair, review: RepairReview) -> str:
     stars = "★" * review.rating + "☆" * (5 - review.rating)
     text = (
@@ -131,6 +145,12 @@ async def notify_customer_status_changed(
             customer_status_message(repair, comment),
             reply_markup=customer_status_keyboard(repair),
         )
+        if repair.status in {"ready", "issued"}:
+            await client.send_message(
+                telegram_user_id,
+                customer_review_message(repair),
+                reply_markup=customer_review_keyboard(repair),
+            )
     except Exception:
         logger.exception("Failed to notify customer about repair status")
     finally:
