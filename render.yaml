@@ -31,6 +31,8 @@ services:
         value: https://matinfix-dtceinuc.manus.space
       - key: PRICE_SHEET_URL
         value: https://docs.google.com/spreadsheets/d/1STYgA0ebn8DixCSVRR6bOog_nJ2A3Taq/export?format=csv
+      - key: REBALL_SHEET_URL
+        value: https://docs.google.com/spreadsheets/d/1zHLz3DWgiSXj2HMUiHxVl9aNuFoN8SQYAx8FeOkL3-I/export?format=csv
 
 databases:
   - name: matinfix-db

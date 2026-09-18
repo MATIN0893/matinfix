@@ -20,6 +20,7 @@ class ServiceKind(StrEnum):
     EARPIECE = "earpiece"
     SCREEN_REPAIR = "screen_repair"
     SMALL_SOLDERING = "small_soldering"
+    REBALL = "reball"
     OTHER = "other"
 
 
@@ -49,6 +50,8 @@ def normalize_text(value: str) -> str:
 
 def detect_service(text: str) -> ServiceKind:
     t = normalize_text(text)
+    if any(x in t for x in ("ребол", "reball", "перекат", "шарик")):
+        return ServiceKind.REBALL
     if any(x in t for x in ("диагност", "провер")):
         return ServiceKind.DIAGNOSTICS
     if any(x in t for x in ("экран", "дисплей", "диспле", "стекл")):

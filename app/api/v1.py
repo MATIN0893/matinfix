@@ -5,12 +5,15 @@ from pydantic import BaseModel, Field
 
 from app.agents.core import MatinAICore
 from app.pricing.engine import PriceEngine
-from app.pricing.google_sheets import GoogleSheetsPriceProvider
+from app.pricing.google_sheets import GoogleSheetsPriceProvider, GoogleSheetsReballProvider
 from app.core.config import settings
 from app.services.language import customer_price_text, detect_language
 
 router = APIRouter(prefix="/api/v1")
-engine = PriceEngine(providers=(GoogleSheetsPriceProvider(settings.price_sheet_url),))
+engine = PriceEngine(providers=(
+    GoogleSheetsPriceProvider(settings.price_sheet_url),
+    GoogleSheetsReballProvider(settings.reball_sheet_url),
+))
 ai_core = MatinAICore(engine)
 
 

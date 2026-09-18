@@ -92,3 +92,61 @@ class GoogleSheetsPriceProvider:
             if price >= 0:
                 rows.append(SheetPriceRow(brand, model, service, price))
         return rows
+
+
+class GoogleSheetsReballProvider:
+    """Reads the second sheet where retail price (РРЦ) is the reball price."""
+
+    source = "google_sheets_reball"
+
+    def __init__(self, csv_url: str | None, ttl_seconds: int = 300) -> None:
+        self.csv_url = csv_url.strip() if csv_url else ""
+        self.ttl_seconds = ttl_seconds
+        self._rows: list[tuple[str, int]] = []
+        self._loaded_at = 0.0
+        self._lock = asyncio.Lock()
+
+    async def find(self, brand: str, model: str, service: str) -> int | None:
+        if not self.csv_url or service != ServiceKind.REBALL:
+            return None
+        await self._refresh_if_needed()
+        wanted = normalize_text(model)
+        for row_model, price in self._rows:
+            alternatives = [normalize_text(part) for part in row_model.split("/")]
+            if wanted == normalize_text(row_model) or any(wanted == part for part in alternatives if part):
+                return price
+        return None
+
+    async def _refresh_if_needed(self) -> None:
+        if self._rows and time.monotonic() - self._loaded_at < self.ttl_seconds:
+            return
+        async with self._lock:
+            if self._rows and time.monotonic() - self._loaded_at < self.ttl_seconds:
+                return
+            try:
+                payload = await asyncio.to_thread(self._download)
+                self._rows = self._parse(payload)
+                self._loaded_at = time.monotonic()
+            except Exception:
+                self._loaded_at = time.monotonic()
+
+    def _download(self) -> str:
+        request = urllib.request.Request(self.csv_url, headers={"User-Agent": "MATINFIX-reball-provider/1.0"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.read().decode("utf-8-sig")
+
+    @staticmethod
+    def _parse(payload: str) -> list[tuple[str, int]]:
+        rows: list[tuple[str, int]] = []
+        for raw in csv.reader(io.StringIO(payload)):
+            if len(raw) < 5 or normalize_text(raw[0]) in {"модель", ""}:
+                continue
+            model = raw[0].strip()
+            retail = raw[4].strip().replace(" ", "").replace(",", ".")
+            try:
+                price = int(float(retail))
+            except ValueError:
+                continue
+            if model and price > 0:
+                rows.append((model, price))
+        return rows

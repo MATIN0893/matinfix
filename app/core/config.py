@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     cors_origins: str = "https://matinfix-dtceinuc.manus.space,http://localhost:3000"
     public_web_url: str = "https://matinfix-dtceinuc.manus.space"
     price_sheet_url: str = ""
+    reball_sheet_url: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
