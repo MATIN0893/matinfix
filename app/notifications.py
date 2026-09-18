@@ -145,7 +145,7 @@ async def notify_customer_status_changed(
             customer_status_message(repair, comment),
             reply_markup=customer_status_keyboard(repair),
         )
-        if repair.status in {"ready", "issued"}:
+        if repair.status in {"ready", "issued"} and getattr(repair, "_status_changed", True):
             await client.send_message(
                 telegram_user_id,
                 customer_review_message(repair),

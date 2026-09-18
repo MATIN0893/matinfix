@@ -162,6 +162,8 @@ async def test_review_stats_and_recent_reviews(session) -> None:
         brand="Samsung", model="A1", problem="battery",
     )
     await change_repair_status(session, workspace_id="workspace-a", repair_id=repair.id, status="issued")
+    repeated = await change_repair_status(session, workspace_id="workspace-a", repair_id=repair.id, status="issued")
+    assert repeated is not None and repeated._status_changed is False
     review = await create_review(session, repair=repair, rating=4, comment="Хорошо")
     assert review.approved is False
     review.approved = True

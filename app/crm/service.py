@@ -112,6 +112,7 @@ async def change_repair_status(
     if repair is None:
         return None
     previous_status = repair.status
+    status_changed = previous_status != status
     if previous_status != status or comment or photo_file_id:
         repair.status = status
         session.add(RepairStatusHistory(
@@ -123,6 +124,7 @@ async def change_repair_status(
         ))
     await session.commit()
     await session.refresh(repair)
+    repair._status_changed = status_changed
     return repair
 
 
