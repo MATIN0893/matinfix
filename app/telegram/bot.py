@@ -231,17 +231,15 @@ async def menu_master_stats(message: Message) -> None:
     if not _is_master(message):
         await message.answer("Команда доступна только мастеру.")
         return
+    from app.crm.analytics import daily_repair_stats
     async with SessionLocal() as session:
-        from app.crm.service import list_repairs
-        repairs = await list_repairs(session, workspace_id=settings.telegram_workspace_id, limit=100)
-    counts = {status: sum(repair.status == status for repair in repairs) for status in VALID_STATUSES}
+        stats = await daily_repair_stats(session, workspace_id=settings.telegram_workspace_id)
     await message.answer(
-        "Статистика заказов:\n"
-        f"Всего: {len(repairs)}\n"
-        f"Новые: {counts['new']}\n"
-        f"В ремонте: {counts['repairing']}\n"
-        f"Готовые: {counts['ready']}\n"
-        f"Выданные: {counts['issued']}"
+        "Статистика за сегодня (UTC):\n"
+        f"Новых заказов: {stats['created_today']}\n"
+        f"Выдано ремонтов: {stats['issued_today']}\n"
+        f"Активная очередь: {stats['active_queue']}\n"
+        f"Среднее время ремонта: {stats['average_repair_hours']} ч."
     )
 
 

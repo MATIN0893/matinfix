@@ -12,6 +12,7 @@ from app.crm.service import (
     get_repair_history,
     list_repairs,
 )
+from app.crm.analytics import daily_repair_stats
 from app.db.models import Base, Workspace
 
 
@@ -183,3 +184,25 @@ async def test_repair_assignment_is_workspace_scoped_and_replaceable(session) ->
     assert await get_repair_assignment(
         session, workspace_id="workspace-b", repair_id=repair.id
     ) is None
+
+
+@pytest.mark.asyncio
+async def test_daily_repair_stats_counts_created_issued_and_active(session) -> None:
+    issued = await create_repair(
+        session, workspace_id="workspace-a", customer_name=None, customer_phone=None,
+        brand="Apple", model="iPhone", problem="battery",
+    )
+    await create_repair(
+        session, workspace_id="workspace-a", customer_name=None, customer_phone=None,
+        brand="Samsung", model="A1", problem="screen",
+    )
+    await change_repair_status(
+        session, workspace_id="workspace-a", repair_id=issued.id, status="issued"
+    )
+
+    stats = await daily_repair_stats(session, workspace_id="workspace-a")
+
+    assert stats["created_today"] == 2
+    assert stats["issued_today"] == 1
+    assert stats["active_queue"] == 1
+    assert "average_repair_hours" in stats
