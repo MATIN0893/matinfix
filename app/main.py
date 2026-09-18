@@ -69,3 +69,8 @@ async def health() -> dict[str, str]:
     except Exception as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
     return {"status": "ok", "service": "matinfix", "version": app.version}
+
+
+@app.get("/", tags=["system"])
+async def root() -> dict[str, str]:
+    return {"service": "matinfix", "status": "online", "docs": "/docs"}
