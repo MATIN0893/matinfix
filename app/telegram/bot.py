@@ -7,15 +7,17 @@ import re
 from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+from sqlalchemy import select
 
 from app.agents.core import MatinAICore
 from app.core.config import settings
-from app.crm.service import get_repair_history
-from app.db.models import Base
+from app.crm.service import VALID_STATUSES, change_repair_status, get_repair_history
+from app.db.models import Base, Repair
 from app.db.session import SessionLocal, engine
 from app.telegram.customer_service import (
     create_customer_repair,
     get_customer_repair,
+    get_repair_telegram_user_id,
     list_customer_repairs,
 )
 
@@ -43,6 +45,10 @@ STATUS_RU = {
     "issued": "Выдан",
     "cancelled": "Отменён",
 }
+
+
+def _is_master(message: Message) -> bool:
+    return _telegram_user_id(message) in settings.master_telegram_ids
 
 
 def _extract_request(text: str) -> tuple[str, str, str] | None:
@@ -108,6 +114,73 @@ async def help_command(message: Message) -> None:
         "/start — начать заново\n\n"
         "Для предварительной цены просто напишите бренд, модель и неисправность."
     )
+    if _is_master(message):
+        await message.answer(
+            "Мастерские команды:\n"
+            "/orders — список заказов\n"
+            "/setstatus ID STATUS — изменить статус"
+        )
+
+
+@router.message(Command("orders"))
+async def master_orders(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    async with SessionLocal() as session:
+        from app.crm.service import list_repairs
+        repairs = await list_repairs(session, workspace_id=settings.telegram_workspace_id, limit=20)
+    if not repairs:
+        await message.answer("Заказов пока нет.")
+        return
+    await message.answer("\n".join(
+        ["Все заказы:"] + [
+            f"{repair.id[:8]} · {repair.brand} {repair.model} · {STATUS_RU.get(repair.status, repair.status)}"
+            for repair in repairs
+        ]
+    ))
+
+
+@router.message(Command("setstatus"))
+async def master_set_status(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 3 or parts[2] not in VALID_STATUSES:
+        await message.answer(
+            "Использование: /setstatus ID STATUS\n"
+            f"Статусы: {', '.join(sorted(VALID_STATUSES))}"
+        )
+        return
+    async with SessionLocal() as session:
+        repairs = await session.scalars(
+            select(Repair).where(
+                Repair.workspace_id == settings.telegram_workspace_id,
+                Repair.id.startswith(parts[1].lower()),
+            ).limit(2)
+        )
+        matches = list(repairs.all())
+        if len(matches) != 1:
+            await message.answer("Заказ не найден или ID неоднозначен.")
+            return
+        repair = await change_repair_status(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            repair_id=matches[0].id,
+            status=parts[2],
+        )
+        customer_telegram_id = await get_repair_telegram_user_id(
+            session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
+        )
+    await message.answer(f"Заказ {repair.id[:8]}: {STATUS_RU.get(repair.status, repair.status)}")
+    if customer_telegram_id and parts[2] in {"ready", "issued", "cancelled"}:
+        await message.bot.send_message(
+            customer_telegram_id,
+            f"Обновление заказа {repair.id[:8]}:\n"
+            f"📱 {repair.brand} {repair.model}\n"
+            f"📌 {STATUS_RU.get(repair.status, repair.status)}",
+        )
 
 
 @router.message(Command("order"))

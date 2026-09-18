@@ -136,3 +136,18 @@ async def get_customer_repair(
     )
     repairs = list(result.all())
     return repairs[0] if len(repairs) == 1 else None
+
+
+async def get_repair_telegram_user_id(
+    session: AsyncSession, *, workspace_id: str, repair_id: str
+) -> str | None:
+    result = await session.scalar(
+        select(TelegramCustomer.telegram_user_id)
+        .join(Repair, Repair.customer_id == TelegramCustomer.customer_id)
+        .where(
+            Repair.workspace_id == workspace_id,
+            Repair.id == repair_id,
+            TelegramCustomer.workspace_id == workspace_id,
+        )
+    )
+    return result

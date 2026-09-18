@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     telegram_workspace_id: str = "telegram-default"
     accountant_codeword: str = "NSS"
     master_api_key: str | None = None
+    master_telegram_user_ids: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -26,6 +27,10 @@ class Settings(BaseSettings):
             url = "postgresql+asyncpg://" + url[len("postgresql://") :]
             return url + ("&" if "?" in url else "?") + "ssl=require"
         return url
+
+    @property
+    def master_telegram_ids(self) -> set[str]:
+        return {item.strip() for item in self.master_telegram_user_ids.split(",") if item.strip()}
 
 
 settings = Settings()
