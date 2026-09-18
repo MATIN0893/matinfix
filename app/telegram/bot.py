@@ -138,6 +138,7 @@ def _master_menu() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📋 Все заказы"), KeyboardButton(text="🆕 Новые")],
             [KeyboardButton(text="🔧 В ремонте"), KeyboardButton(text="✅ Готовые")],
             [KeyboardButton(text="👤 Мои заказы"), KeyboardButton(text="📊 Статистика")],
+            [KeyboardButton(text="📦 Склад")],
             [KeyboardButton(text="ℹ️ Помощь")],
         ],
         resize_keyboard=True,
@@ -259,8 +260,70 @@ async def help_command(message: Message) -> None:
             "Мастерские команды:\n"
             "/orders [STATUS] — список заказов или фильтр по статусу\n"
             "/assign ID — взять заказ в работу\n"
-            "/setstatus ID STATUS — изменить статус"
+            "/setstatus ID STATUS — изменить статус\n"
+            "/stock — остатки деталей\n"
+            "/reservepart ID SKU [QTY] — зарезервировать деталь\n"
+            "/usepart ID SKU [QTY] — списать установленную деталь"
         )
+
+
+@router.message(Command("stock"))
+async def master_stock(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    from app.crm.inventory import list_inventory
+    async with SessionLocal() as session:
+        parts = await list_inventory(session, workspace_id=settings.telegram_workspace_id)
+    if not parts:
+        await message.answer("Склад пока пуст.")
+        return
+    lines = ["Остатки склада:"]
+    for part in parts:
+        available = part.quantity - part.reserved_quantity
+        warning = " ⚠️ ниже минимума" if available <= part.reorder_level else ""
+        lines.append(f"{part.sku} · {part.name}: {available} доступно, {part.reserved_quantity} резерв{warning}")
+    await message.answer("\n".join(lines))
+
+
+@router.message(F.text == "📦 Склад")
+async def menu_master_stock(message: Message) -> None:
+    await master_stock(message)
+
+
+async def _handle_part_command(message: Message, *, action: str) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) not in {3, 4}:
+        await message.answer(f"Использование: /{action} ID SKU [QTY]")
+        return
+    try:
+        quantity = int(parts[3]) if len(parts) == 4 else 1
+        async with SessionLocal() as session:
+            from app.crm.inventory import reserve_part, use_part
+            operation = reserve_part if action == "reservepart" else use_part
+            part, usage = await operation(
+                session, workspace_id=settings.telegram_workspace_id,
+                repair_id=parts[1], sku=parts[2], quantity=quantity,
+            )
+    except (ValueError, TypeError) as exc:
+        await message.answer(f"Операция со складом не выполнена: {exc}")
+        return
+    available = part.quantity - part.reserved_quantity
+    verb = "зарезервировано" if action == "reservepart" else "списано"
+    await message.answer(f"{parts[2]}: {quantity} шт. {verb}. Доступно: {available}.")
+
+
+@router.message(Command("reservepart"))
+async def master_reserve_part(message: Message) -> None:
+    await _handle_part_command(message, action="reservepart")
+
+
+@router.message(Command("usepart"))
+async def master_use_part(message: Message) -> None:
+    await _handle_part_command(message, action="usepart")
 
 
 @router.message(Command("orders"))

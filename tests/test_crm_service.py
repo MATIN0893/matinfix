@@ -13,6 +13,7 @@ from app.crm.service import (
     list_repairs,
 )
 from app.crm.analytics import daily_repair_stats
+from app.crm.inventory import reserve_part, upsert_inventory_part, use_part
 from app.db.models import Base, Workspace
 
 
@@ -206,3 +207,45 @@ async def test_daily_repair_stats_counts_created_issued_and_active(session) -> N
     assert stats["issued_today"] == 1
     assert stats["active_queue"] == 1
     assert "average_repair_hours" in stats
+
+
+@pytest.mark.asyncio
+async def test_inventory_reserves_and_consumes_part(session) -> None:
+    repair = await create_repair(
+        session, workspace_id="workspace-a", customer_name=None, customer_phone=None,
+        brand="Xiaomi", model="Redmi", problem="screen",
+    )
+    part = await upsert_inventory_part(
+        session, workspace_id="workspace-a", sku="LCD-REDMI", name="Redmi display",
+        quantity=3, reorder_level=1,
+    )
+
+    reserved_part, usage = await reserve_part(
+        session, workspace_id="workspace-a", repair_id=repair.id, sku="LCD-REDMI", quantity=2
+    )
+    assert reserved_part.quantity == 3
+    assert reserved_part.reserved_quantity == 2
+    assert usage.reserved_quantity == 2
+
+    consumed_part, consumed_usage = await use_part(
+        session, workspace_id="workspace-a", repair_id=repair.id, sku="LCD-REDMI", quantity=1
+    )
+    assert consumed_part.quantity == 2
+    assert consumed_part.reserved_quantity == 1
+    assert consumed_usage.used_quantity == 1
+
+
+@pytest.mark.asyncio
+async def test_inventory_rejects_reservation_above_available_stock(session) -> None:
+    repair = await create_repair(
+        session, workspace_id="workspace-a", customer_name=None, customer_phone=None,
+        brand="Apple", model="iPhone", problem="battery",
+    )
+    await upsert_inventory_part(
+        session, workspace_id="workspace-a", sku="BAT-IPH", name="iPhone battery", quantity=1
+    )
+
+    with pytest.raises(ValueError, match="not enough stock"):
+        await reserve_part(
+            session, workspace_id="workspace-a", repair_id=repair.id, sku="BAT-IPH", quantity=2
+        )
