@@ -20,4 +20,9 @@ services:
       - key: ACCOUNTANT_CODEWORD
         sync: false
 
-# Redis/Key Value will be attached after the database-backed API is stable.
+databases:
+  - name: matinfix-db
+    plan: free
+    region: frankfurt
+    databaseName: matinfix
+    user: matinfix
