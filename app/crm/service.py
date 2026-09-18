@@ -92,7 +92,13 @@ async def get_repair_history(
 
 
 async def change_repair_status(
-    session: AsyncSession, *, workspace_id: str, repair_id: str, status: str
+    session: AsyncSession,
+    *,
+    workspace_id: str,
+    repair_id: str,
+    status: str,
+    comment: str | None = None,
+    photo_file_id: str | None = None,
 ) -> Repair | None:
     if status not in VALID_STATUSES:
         raise ValueError(f"unknown repair status: {status}")
@@ -105,6 +111,8 @@ async def change_repair_status(
         session.add(RepairStatusHistory(
             id=new_id(), workspace_id=workspace_id, repair_id=repair.id,
             from_status=previous_status, to_status=status,
+            comment=comment.strip() if comment else None,
+            photo_file_id=photo_file_id,
             changed_at=datetime.now(timezone.utc),
         ))
     await session.commit()

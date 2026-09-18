@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 
-from aiogram import Bot, Dispatcher, Router
+from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
@@ -291,7 +291,12 @@ async def repair_history_callback(callback: CallbackQuery) -> None:
     await callback.answer()
     if callback.message is not None:
         lines = [f"История заказа {repair.id[:8]}:"]
-        lines.extend(f"{item.from_status or '—'} → {item.to_status}" for item in history)
+        lines.extend(
+            f"{item.from_status or '—'} → {item.to_status}"
+            + (f" · {item.comment}" if item.comment else "")
+            + (" · фото" if item.photo_file_id else "")
+            for item in history
+        )
         await callback.message.answer("\n".join(lines))
 
 
@@ -327,16 +332,30 @@ async def master_assign(message: Message) -> None:
 
 @router.message(Command("setstatus"))
 async def master_set_status(message: Message) -> None:
+    await _handle_master_status(message)
+
+
+@router.message(F.photo)
+async def master_set_status_with_photo(message: Message) -> None:
+    if (message.caption or "").strip().startswith("/setstatus"):
+        await _handle_master_status(message)
+
+
+async def _handle_master_status(message: Message) -> None:
     if not _is_master(message):
         await message.answer("Команда доступна только мастеру.")
         return
-    parts = (message.text or "").split()
-    if len(parts) != 3 or parts[2] not in VALID_STATUSES:
+    command_text = message.text or message.caption or ""
+    parts = command_text.split(maxsplit=3)
+    if len(parts) < 3 or parts[2] not in VALID_STATUSES:
         await message.answer(
-            "Использование: /setstatus ID STATUS\n"
+            "Использование: /setstatus ID STATUS [комментарий]\n"
+            "Фото можно отправить с этой командой в подписи.\n"
             f"Статусы: {', '.join(sorted(VALID_STATUSES))}"
         )
         return
+    comment = parts[3].strip() if len(parts) == 4 else None
+    photo_file_id = message.photo[-1].file_id if message.photo else None
     async with SessionLocal() as session:
         repairs = await session.scalars(
             select(Repair).where(
@@ -353,11 +372,17 @@ async def master_set_status(message: Message) -> None:
             workspace_id=settings.telegram_workspace_id,
             repair_id=matches[0].id,
             status=parts[2],
+            comment=comment,
+            photo_file_id=photo_file_id,
         )
         customer_telegram_id = await get_repair_telegram_user_id(
             session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
         )
-    await message.answer(f"Заказ {repair.id[:8]}: {STATUS_RU.get(repair.status, repair.status)}")
+    attachment = " с фото" if photo_file_id else ""
+    note = f" Комментарий: {comment}" if comment else ""
+    await message.answer(
+        f"Заказ {repair.id[:8]}: {STATUS_RU.get(repair.status, repair.status)}{attachment}.{note}"
+    )
     if customer_telegram_id and parts[2] in {"ready", "issued", "cancelled"}:
         await message.bot.send_message(
             customer_telegram_id,

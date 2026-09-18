@@ -86,4 +86,6 @@ class RepairStatusHistory(Base):
     repair_id: Mapped[str] = mapped_column(ForeignKey("repairs.id", ondelete="CASCADE"), index=True)
     from_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     to_status: Mapped[str] = mapped_column(String(32))
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_file_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

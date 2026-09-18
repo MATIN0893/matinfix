@@ -75,6 +75,32 @@ async def test_status_history_records_creation_and_transition(session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_status_history_keeps_comment_and_photo_reference(session) -> None:
+    repair = await create_repair(
+        session,
+        workspace_id="workspace-a",
+        customer_name=None,
+        customer_phone=None,
+        brand="Samsung",
+        model="A1",
+        problem="screen",
+    )
+
+    await change_repair_status(
+        session,
+        workspace_id="workspace-a",
+        repair_id=repair.id,
+        status="diagnostics",
+        comment="Есть следы влаги",
+        photo_file_id="telegram-file-123",
+    )
+
+    history = await get_repair_history(session, workspace_id="workspace-a", repair_id=repair.id)
+    assert history[-1].comment == "Есть следы влаги"
+    assert history[-1].photo_file_id == "telegram-file-123"
+
+
+@pytest.mark.asyncio
 async def test_list_repairs_filters_by_status_and_workspace(session) -> None:
     first = await create_repair(
         session,

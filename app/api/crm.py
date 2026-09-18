@@ -28,6 +28,8 @@ class RepairCreateRequest(BaseModel):
 class RepairStatusRequest(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=36)
     status: str = Field(min_length=1, max_length=32)
+    comment: str | None = Field(default=None, max_length=4000)
+    photo_file_id: str | None = Field(default=None, max_length=256)
 
 
 def repair_response(repair) -> dict:
@@ -49,6 +51,8 @@ def history_response(item) -> dict:
         "repair_id": item.repair_id,
         "from_status": item.from_status,
         "to_status": item.to_status,
+        "comment": item.comment,
+        "photo_file_id": item.photo_file_id,
         "changed_at": item.changed_at,
     }
 
@@ -114,6 +118,8 @@ async def update_repair_status(
         repair = await change_repair_status(
             session, workspace_id=request.workspace_id,
             repair_id=repair_id, status=request.status,
+            comment=request.comment,
+            photo_file_id=request.photo_file_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
