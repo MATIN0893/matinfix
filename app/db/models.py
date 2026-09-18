@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from secrets import token_urlsafe
 from uuid import uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
@@ -13,6 +14,10 @@ class Base(DeclarativeBase):
 
 def new_id() -> str:
     return str(uuid4())
+
+
+def new_public_token() -> str:
+    return token_urlsafe(32)
 
 
 class Workspace(Base):
@@ -54,6 +59,7 @@ class TelegramCustomer(Base):
 class Repair(Base):
     __tablename__ = "repairs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    public_token: Mapped[str] = mapped_column(String(64), unique=True, index=True, default=new_public_token)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"), index=True)
     brand: Mapped[str] = mapped_column(String(64))

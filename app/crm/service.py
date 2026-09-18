@@ -58,6 +58,12 @@ async def get_repair(
     )
 
 
+async def get_repair_by_public_token(
+    session: AsyncSession, *, public_token: str
+) -> Repair | None:
+    return await session.scalar(select(Repair).where(Repair.public_token == public_token))
+
+
 async def list_repairs(
     session: AsyncSession,
     *,

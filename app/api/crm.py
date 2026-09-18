@@ -8,6 +8,7 @@ from app.crm.service import (
     change_repair_status,
     create_repair,
     get_repair,
+    get_repair_by_public_token,
     get_repair_history,
     list_repairs,
 )
@@ -35,6 +36,7 @@ class RepairStatusRequest(BaseModel):
 def repair_response(repair) -> dict:
     return {
         "id": repair.id,
+        "public_token": repair.public_token,
         "workspace_id": repair.workspace_id,
         "customer_id": repair.customer_id,
         "brand": repair.brand,
@@ -58,6 +60,20 @@ def history_response(item) -> dict:
         "comment": item.comment,
         "photo_file_id": item.photo_file_id,
         "changed_at": item.changed_at,
+    }
+
+
+def public_repair_response(repair, history) -> dict:
+    return {
+        "id": repair.id,
+        "brand": repair.brand,
+        "model": repair.model,
+        "status": repair.status,
+        "quoted_price": repair.quoted_price,
+        "final_price": repair.final_price,
+        "payment_status": repair.payment_status,
+        "created_at": repair.created_at,
+        "history": [history_response(item) for item in history],
     }
 
 
@@ -93,6 +109,20 @@ async def get_repair_order_history(
         raise HTTPException(status_code=404, detail="repair order not found")
     history = await get_repair_history(session, workspace_id=workspace_id, repair_id=repair_id)
     return {"items": [history_response(item) for item in history]}
+
+
+@router.get("/public/repairs/{public_token}")
+async def get_public_repair_order(
+    public_token: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    repair = await get_repair_by_public_token(session, public_token=public_token)
+    if repair is None:
+        raise HTTPException(status_code=404, detail="public repair link not found")
+    history = await get_repair_history(
+        session, workspace_id=repair.workspace_id, repair_id=repair.id
+    )
+    return public_repair_response(repair, history)
 
 
 @router.get("/repairs")

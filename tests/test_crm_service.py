@@ -8,6 +8,7 @@ from app.crm.service import (
     change_repair_status,
     create_repair,
     get_repair,
+    get_repair_by_public_token,
     get_repair_assignment,
     get_repair_history,
     list_repairs,
@@ -44,6 +45,8 @@ async def test_repair_isolated_by_workspace(session) -> None:
     )
 
     assert await get_repair(session, workspace_id="workspace-a", repair_id=repair.id) is not None
+    assert repair.public_token
+    assert await get_repair_by_public_token(session, public_token=repair.public_token) is repair
     assert await get_repair(session, workspace_id="workspace-b", repair_id=repair.id) is None
     assert await change_repair_status(
         session, workspace_id="workspace-b", repair_id=repair.id, status="ready"
