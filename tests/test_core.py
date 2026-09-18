@@ -4,7 +4,13 @@ from httpx import ASGITransport, AsyncClient
 from app.core.config import settings
 from app.api.master import require_master_key
 from app.main import app
-from app.notifications import new_repair_keyboard, new_repair_message, public_repair_url
+from app.notifications import (
+    customer_status_keyboard,
+    customer_status_message,
+    new_repair_keyboard,
+    new_repair_message,
+    public_repair_url,
+)
 
 
 @pytest.mark.asyncio
@@ -43,6 +49,9 @@ def test_new_repair_notification_contains_public_link_data() -> None:
     assert public_repair_url(repair).endswith("/?order=public-token")
     callbacks = [button.callback_data for row in new_repair_keyboard(repair).inline_keyboard[1:] for button in row]
     assert "repair_status:12345678-aaaa-bbbb-cccc-dddddddddddd:ready" in callbacks
+    repair.status = "repairing"
+    assert "В ремонте" in customer_status_message(repair, "Поставили новый дисплей")
+    assert customer_status_keyboard(repair).inline_keyboard[0][0].url.endswith("public-token")
 
 
 @pytest.mark.asyncio

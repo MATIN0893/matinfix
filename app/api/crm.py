@@ -13,7 +13,8 @@ from app.crm.service import (
     list_repairs,
 )
 from app.db.session import get_session
-from app.notifications import notify_masters_about_new_repair
+from app.notifications import notify_customer_status_changed, notify_masters_about_new_repair
+from app.telegram.customer_service import get_repair_telegram_user_id
 
 router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
 
@@ -161,4 +162,11 @@ async def update_repair_status(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if repair is None:
         raise HTTPException(status_code=404, detail="repair order not found")
+    telegram_user_id = await get_repair_telegram_user_id(
+        session, workspace_id=request.workspace_id, repair_id=repair.id
+    )
+    if telegram_user_id:
+        await notify_customer_status_changed(
+            repair, telegram_user_id, comment=request.comment
+        )
     return repair_response(repair)

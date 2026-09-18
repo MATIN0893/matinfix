@@ -19,6 +19,15 @@ STATUS_BUTTONS = (
     ("Выдан", "issued"),
     ("Отменён", "cancelled"),
 )
+STATUS_RU = {
+    "new": "Новый заказ",
+    "diagnostics": "Диагностика",
+    "waiting_part": "Ожидание детали",
+    "repairing": "В ремонте",
+    "ready": "Готов",
+    "issued": "Выдан",
+    "cancelled": "Отменён",
+}
 
 
 def public_repair_url(repair: Repair) -> str:
@@ -45,6 +54,47 @@ def new_repair_keyboard(repair: Repair) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=label, callback_data=f"repair_status:{repair.id}:{status}") for label, status in STATUS_BUTTONS[4:]],
         ]
     )
+
+
+def customer_status_message(repair: Repair, comment: str | None = None) -> str:
+    text = (
+        f"Обновление заказа {repair.id[:8]}\n"
+        f"📱 {repair.brand} {repair.model}\n"
+        f"📌 {STATUS_RU.get(repair.status, repair.status)}"
+    )
+    if comment:
+        text += f"\n💬 {comment}"
+    return text
+
+
+def customer_status_keyboard(repair: Repair) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="Открыть статус", url=public_repair_url(repair))]]
+    )
+
+
+async def notify_customer_status_changed(
+    repair: Repair,
+    telegram_user_id: str,
+    *,
+    comment: str | None = None,
+    bot: Bot | None = None,
+) -> None:
+    if not settings.telegram_bot_token or not telegram_user_id:
+        return
+    owned_bot = bot is None
+    client = bot or Bot(settings.telegram_bot_token)
+    try:
+        await client.send_message(
+            telegram_user_id,
+            customer_status_message(repair, comment),
+            reply_markup=customer_status_keyboard(repair),
+        )
+    except Exception:
+        logger.exception("Failed to notify customer about repair status")
+    finally:
+        if owned_bot:
+            await client.session.close()
 
 
 async def notify_masters_about_new_repair(repair: Repair) -> None:

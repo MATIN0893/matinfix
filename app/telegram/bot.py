@@ -27,6 +27,7 @@ from app.crm.service import (
 )
 from app.db.models import Base, Repair, RepairAssignment
 from app.db.session import SessionLocal, engine
+from app.notifications import notify_customer_status_changed
 from app.telegram.customer_service import (
     create_customer_repair,
     get_customer_repair,
@@ -481,13 +482,8 @@ async def repair_status_callback(callback: CallbackQuery) -> None:
         await callback.message.answer(
             f"Заказ {repair.id[:8]} обновлён: {STATUS_RU.get(repair.status, repair.status)}"
         )
-    if customer_telegram_id and status in {"ready", "issued", "cancelled"} and callback.bot:
-        await callback.bot.send_message(
-            customer_telegram_id,
-            f"Обновление заказа {repair.id[:8]}:\n"
-            f"📱 {repair.brand} {repair.model}\n"
-            f"📌 {STATUS_RU.get(repair.status, repair.status)}",
-        )
+    if customer_telegram_id and callback.bot:
+        await notify_customer_status_changed(repair, customer_telegram_id, bot=callback.bot)
 
 
 @router.callback_query(lambda query: query.data and query.data.startswith("repair_assign:"))
@@ -671,12 +667,9 @@ async def _handle_master_status(message: Message) -> None:
     await message.answer(
         f"Заказ {repair.id[:8]}: {STATUS_RU.get(repair.status, repair.status)}{attachment}.{note}"
     )
-    if customer_telegram_id and parts[2] in {"ready", "issued", "cancelled"}:
-        await message.bot.send_message(
-            customer_telegram_id,
-            f"Обновление заказа {repair.id[:8]}:\n"
-            f"📱 {repair.brand} {repair.model}\n"
-            f"📌 {STATUS_RU.get(repair.status, repair.status)}",
+    if customer_telegram_id:
+        await notify_customer_status_changed(
+            repair, customer_telegram_id, comment=comment, bot=message.bot
         )
 
 
