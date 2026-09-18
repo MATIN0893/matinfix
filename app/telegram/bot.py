@@ -94,6 +94,17 @@ async def start(message: Message) -> None:
     )
 
 
+@router.message(Command("help"))
+async def help_command(message: Message) -> None:
+    await message.answer(
+        "Команды MATINFIX:\n"
+        "/order Бренд Модель неисправность — создать заказ\n"
+        "/myorders — показать мои заказы\n"
+        "/start — начать заново\n\n"
+        "Для предварительной цены просто напишите бренд, модель и неисправность."
+    )
+
+
 @router.message(Command("order"))
 async def create_order(message: Message) -> None:
     text = (message.text or "").split(maxsplit=1)
@@ -111,17 +122,22 @@ async def create_order(message: Message) -> None:
         await message.answer(decision.response)
         return
 
-    async with SessionLocal() as session:
-        repair = await create_customer_repair(
-            session,
-            workspace_id=settings.telegram_workspace_id,
-            telegram_user_id=_telegram_user_id(message),
-            username=message.from_user.username if message.from_user else None,
-            display_name=_display_name(message),
-            brand=brand,
-            model=model,
-            problem=service,
-        )
+    try:
+        async with SessionLocal() as session:
+            repair = await create_customer_repair(
+                session,
+                workspace_id=settings.telegram_workspace_id,
+                telegram_user_id=_telegram_user_id(message),
+                username=message.from_user.username if message.from_user else None,
+                display_name=_display_name(message),
+                brand=brand,
+                model=model,
+                problem=service,
+            )
+    except Exception:
+        logger.exception("Failed to create Telegram repair order")
+        await message.answer("Не удалось сохранить заказ. Попробуйте ещё раз позже.")
+        return
     await message.answer(
         f"Заказ создан.\n"
         f"📱 {brand} {model}\n"
@@ -133,12 +149,17 @@ async def create_order(message: Message) -> None:
 
 @router.message(Command("myorders"))
 async def my_orders(message: Message) -> None:
-    async with SessionLocal() as session:
-        repairs = await list_customer_repairs(
-            session,
-            workspace_id=settings.telegram_workspace_id,
-            telegram_user_id=_telegram_user_id(message),
-        )
+    try:
+        async with SessionLocal() as session:
+            repairs = await list_customer_repairs(
+                session,
+                workspace_id=settings.telegram_workspace_id,
+                telegram_user_id=_telegram_user_id(message),
+            )
+    except Exception:
+        logger.exception("Failed to list Telegram repair orders")
+        await message.answer("Не удалось загрузить заказы. Попробуйте ещё раз позже.")
+        return
     if not repairs:
         await message.answer("Заказов пока нет.")
         return
