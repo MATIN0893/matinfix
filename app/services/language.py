@@ -42,7 +42,7 @@ def detect_language(text: str) -> str:
     # function/content words; otherwise leave it as the Russian fallback.
     english_words = {
         "price", "screen", "display", "battery", "repair", "replace",
-        "replacement", "phone", "how", "much", "cost", "charging",
+        "replacement", "phone", "iphone", "how", "much", "cost", "charging",
     }
     if words.intersection(english_words):
         return "en"

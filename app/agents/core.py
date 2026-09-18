@@ -39,7 +39,7 @@ class MatinAICore:
         *,
         model_year: int | None = None,
     ) -> CoreDecision:
-        language = detect_language(service)
+        language = detect_language(f"{brand} {model} {service}")
         decision = await self.price_engine.decide(
             brand, model, service, model_year=model_year
         )

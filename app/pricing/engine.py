@@ -51,7 +51,7 @@ def detect_service(text: str) -> ServiceKind:
     t = normalize_text(text)
     if any(x in t for x in ("диагност", "провер")):
         return ServiceKind.DIAGNOSTICS
-    if any(x in t for x in ("экран", "дисплей", "стекл")):
+    if any(x in t for x in ("экран", "дисплей", "диспле", "стекл")):
         return ServiceKind.DISPLAY
     if any(x in t for x in ("аккумулятор", "батаре")):
         return ServiceKind.BATTERY
@@ -60,9 +60,9 @@ def detect_service(text: str) -> ServiceKind:
     if any(x in t for x in ("гидрогел", "пленк")):
         return ServiceKind.HYDROGEL
     # Replacement/repair intent must win over generic cleaning words.
-    if any(x in t for x in ("шлейф заряд", "charging flex", "шлейф зарядки")):
+    if any(x in t for x in ("шлейф заряд", "шлейфа заряд", "charging flex")):
         return ServiceKind.CHARGING_FLEX
-    if any(x in t for x in ("разъем заряд", "разъём заряд", "порт заряд", "гнездо заряд")):
+    if any(x in t for x in ("разъем заряд", "разъема заряд", "разъём заряд", "разъёма заряд", "порт заряд", "гнездо заряд")):
         return ServiceKind.CHARGING_PORT
     if any(x in t for x in ("нижн", "нижняя плата")) and any(x in t for x in ("плат", "шлейф", "микрофон")):
         return ServiceKind.MIC_BOTTOM
@@ -72,7 +72,7 @@ def detect_service(text: str) -> ServiceKind:
         return ServiceKind.POWER_VOLUME_SPEAKER
     if any(x in t for x in ("динамик", "speaker")) and any(x in t for x in ("замен", "ремонт", "не работает", "не слышно")):
         return ServiceKind.POWER_VOLUME_SPEAKER
-    if any(x in t for x in ("чистк", "гряз", "прочист")):
+    if any(x in t for x in ("чист", "гряз", "прочист")):
         return ServiceKind.CLEANING
     if any(x in t for x in ("микрофон",)):
         return ServiceKind.MIC_BOTTOM

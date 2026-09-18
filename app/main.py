@@ -22,7 +22,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.4.0",
+    version="0.2.0",
     description="MATIN — repair service operating platform and AI Core.",
     lifespan=lifespan,
 )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,7 +43,7 @@ async def create_repair(
     session.add(repair)
     session.add(RepairStatusHistory(
         id=new_id(), workspace_id=workspace_id, repair_id=repair.id,
-        from_status=None, to_status="new",
+        from_status=None, to_status="new", changed_at=datetime.now(timezone.utc),
     ))
     await session.commit()
     await session.refresh(repair)
@@ -103,6 +105,7 @@ async def change_repair_status(
         session.add(RepairStatusHistory(
             id=new_id(), workspace_id=workspace_id, repair_id=repair.id,
             from_status=previous_status, to_status=status,
+            changed_at=datetime.now(timezone.utc),
         ))
     await session.commit()
     await session.refresh(repair)
