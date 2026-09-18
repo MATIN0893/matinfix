@@ -87,6 +87,27 @@ def customer_review_message(repair: Repair) -> str:
     )
 
 
+async def notify_customer_review_published(
+    repair: Repair, telegram_user_id: str, *, bot: Bot | None = None
+) -> None:
+    if not settings.telegram_bot_token or not telegram_user_id:
+        return
+    owned_bot = bot is None
+    client = bot or Bot(settings.telegram_bot_token)
+    try:
+        await client.send_message(
+            telegram_user_id,
+            f"Спасибо за отзыв о заказе {repair.id[:8]}!\n"
+            "Мастер подтвердил публикацию — отзыв уже помогает другим клиентам выбрать MATINFIX.",
+            reply_markup=customer_status_keyboard(repair),
+        )
+    except Exception:
+        logger.exception("Failed to notify customer about published review")
+    finally:
+        if owned_bot:
+            await client.session.close()
+
+
 def review_message(repair: Repair, review: RepairReview) -> str:
     stars = "★" * review.rating + "☆" * (5 - review.rating)
     text = (

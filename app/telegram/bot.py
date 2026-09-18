@@ -28,7 +28,7 @@ from app.crm.service import (
 from app.crm.reviews import list_reviews, review_stats, set_review_approval
 from app.db.models import Base, Repair, RepairAssignment
 from app.db.session import SessionLocal, engine
-from app.notifications import notify_customer_status_changed
+from app.notifications import notify_customer_review_published, notify_customer_status_changed
 from app.telegram.customer_service import (
     create_customer_repair,
     get_customer_repair,
@@ -480,8 +480,16 @@ async def _moderate_review(callback: CallbackQuery, approved: bool) -> None:
         await callback.answer("Команда доступна только мастеру.", show_alert=True)
         return
     review_id = (callback.data or "").split(":", maxsplit=1)[1]
+    repair = None
+    customer_telegram_id = None
     async with SessionLocal() as session:
         review = await set_review_approval(session, review_id=review_id, approved=approved)
+        if review is not None and approved:
+            repair = await session.get(Repair, review.repair_id)
+            if repair is not None:
+                customer_telegram_id = await get_repair_telegram_user_id(
+                    session, workspace_id=repair.workspace_id, repair_id=repair.id
+                )
     if review is None:
         await callback.answer("Отзыв не найден.", show_alert=True)
         return
@@ -489,6 +497,8 @@ async def _moderate_review(callback: CallbackQuery, approved: bool) -> None:
     if callback.message is not None:
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("Отзыв опубликован на сайте." if approved else "Отзыв скрыт и не показывается на сайте.")
+    if approved and repair is not None and customer_telegram_id and callback.bot:
+        await notify_customer_review_published(repair, customer_telegram_id, bot=callback.bot)
 
 
 @router.callback_query(lambda query: query.data and query.data.startswith("review_approve:"))
