@@ -262,6 +262,7 @@ async def help_command(message: Message) -> None:
             "/assign ID — взять заказ в работу\n"
             "/setstatus ID STATUS — изменить статус\n"
             "/stock — остатки деталей\n"
+            "/restock SKU QTY — пополнить остаток\n"
             "/reservepart ID SKU [QTY] — зарезервировать деталь\n"
             "/usepart ID SKU [QTY] — списать установленную деталь"
         )
@@ -314,6 +315,32 @@ async def _handle_part_command(message: Message, *, action: str) -> None:
     available = part.quantity - part.reserved_quantity
     verb = "зарезервировано" if action == "reservepart" else "списано"
     await message.answer(f"{parts[2]}: {quantity} шт. {verb}. Доступно: {available}.")
+
+
+@router.message(Command("restock"))
+async def master_restock(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 3:
+        await message.answer("Использование: /restock SKU QTY")
+        return
+    try:
+        from app.crm.inventory import restock_part
+        async with SessionLocal() as session:
+            part = await restock_part(
+                session,
+                workspace_id=settings.telegram_workspace_id,
+                sku=parts[1],
+                quantity=int(parts[2]),
+            )
+    except (ValueError, TypeError) as exc:
+        await message.answer(f"Пополнение не выполнено: {exc}")
+        return
+    await message.answer(
+        f"{part.sku}: склад пополнен. Доступно: {part.quantity - part.reserved_quantity}."
+    )
 
 
 @router.message(Command("reservepart"))

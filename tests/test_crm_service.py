@@ -249,3 +249,8 @@ async def test_inventory_rejects_reservation_above_available_stock(session) -> N
         await reserve_part(
             session, workspace_id="workspace-a", repair_id=repair.id, sku="BAT-IPH", quantity=2
         )
+    refreshed = await get_repair(session, workspace_id="workspace-a", repair_id=repair.id)
+    assert refreshed is not None
+    assert refreshed.status == "waiting_part"
+    history = await get_repair_history(session, workspace_id="workspace-a", repair_id=repair.id)
+    assert "Нехватка детали BAT-IPH" in (history[-1].comment or "")

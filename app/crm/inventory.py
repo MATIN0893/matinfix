@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InventoryPart, Repair, RepairPartUsage, new_id
+from app.crm.service import change_repair_status
 
 
 async def list_inventory(session: AsyncSession, *, workspace_id: str) -> list[InventoryPart]:
@@ -45,6 +46,26 @@ async def upsert_inventory_part(
     return part
 
 
+async def restock_part(
+    session: AsyncSession,
+    *,
+    workspace_id: str,
+    sku: str,
+    quantity: int,
+) -> InventoryPart:
+    if quantity <= 0:
+        raise ValueError("quantity must be positive")
+    part = await session.scalar(select(InventoryPart).where(
+        InventoryPart.workspace_id == workspace_id, InventoryPart.sku == sku.strip()
+    ))
+    if part is None:
+        raise ValueError("inventory part not found")
+    part.quantity += quantity
+    await session.commit()
+    await session.refresh(part)
+    return part
+
+
 async def reserve_part(
     session: AsyncSession,
     *,
@@ -67,6 +88,14 @@ async def reserve_part(
         raise ValueError("inventory part not found")
     available = part.quantity - part.reserved_quantity
     if available < quantity:
+        if repair.status not in {"issued", "cancelled"}:
+            await change_repair_status(
+                session,
+                workspace_id=workspace_id,
+                repair_id=repair_id,
+                status="waiting_part",
+                comment=f"Нехватка детали {part.sku}: доступно {available}, нужно {quantity}",
+            )
         raise ValueError(f"not enough stock: available {available}")
     usage = await session.scalar(select(RepairPartUsage).where(
         RepairPartUsage.repair_id == repair_id, RepairPartUsage.part_id == part.id

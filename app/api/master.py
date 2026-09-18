@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.master import MasterAI
 from app.core.config import settings
+from app.crm.inventory import list_inventory, reserve_part, restock_part, use_part
+from app.db.session import get_session
 
 router = APIRouter(prefix="/api/v1/master", tags=["master-ai"])
 master_ai = MasterAI()
@@ -29,6 +32,16 @@ class MasterStatusRequest(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=36)
     repair_id: str = Field(min_length=1, max_length=36)
     status: str = Field(min_length=1, max_length=32)
+
+
+class InventoryRestockRequest(BaseModel):
+    workspace_id: str = Field(min_length=1, max_length=36)
+    sku: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(gt=0, le=100000)
+
+
+class InventoryRepairRequest(InventoryRestockRequest):
+    repair_id: str = Field(min_length=1, max_length=36)
 
 
 @router.post("/orders", status_code=201, dependencies=[Depends(require_master_key)])
@@ -60,3 +73,52 @@ async def master_set_status(request: MasterStatusRequest) -> dict:
         "response": decision.response,
         "repair_id": decision.repair_id,
     }
+
+
+@router.get("/stock", dependencies=[Depends(require_master_key)])
+async def master_stock(workspace_id: str, session: AsyncSession = Depends(get_session)) -> dict:
+    parts = await list_inventory(session, workspace_id=workspace_id)
+    return {"items": [
+        {
+            "sku": part.sku,
+            "name": part.name,
+            "quantity": part.quantity,
+            "reserved_quantity": part.reserved_quantity,
+            "available_quantity": part.quantity - part.reserved_quantity,
+            "reorder_level": part.reorder_level,
+        }
+        for part in parts
+    ]}
+
+
+@router.post("/stock/restock", dependencies=[Depends(require_master_key)])
+async def master_restock(
+    request: InventoryRestockRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
+    try:
+        part = await restock_part(session, **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"sku": part.sku, "quantity": part.quantity, "reserved_quantity": part.reserved_quantity}
+
+
+@router.post("/stock/reserve", dependencies=[Depends(require_master_key)])
+async def master_reserve(
+    request: InventoryRepairRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
+    try:
+        part, usage = await reserve_part(session, **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"sku": part.sku, "reserved_quantity": usage.reserved_quantity}
+
+
+@router.post("/stock/use", dependencies=[Depends(require_master_key)])
+async def master_use(
+    request: InventoryRepairRequest, session: AsyncSession = Depends(get_session)
+) -> dict:
+    try:
+        part, usage = await use_part(session, **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"sku": part.sku, "quantity": part.quantity, "used_quantity": usage.used_quantity}
