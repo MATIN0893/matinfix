@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager, suppress
 
 from aiogram import Bot, Dispatcher
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.crm import router as crm_router
@@ -46,6 +47,13 @@ app = FastAPI(
     version="0.2.0",
     description="MATIN — repair service operating platform and AI Core.",
     lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 app.include_router(system_router)
 app.include_router(api_router)

@@ -15,6 +15,21 @@ async def test_health() -> None:
 
 
 @pytest.mark.asyncio
+async def test_website_cors_preflight() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.options(
+            "/api/v1/crm/repairs",
+            headers={
+                "Origin": "https://matinfix-dtceinuc.manus.space",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://matinfix-dtceinuc.manus.space"
+
+
+@pytest.mark.asyncio
 async def test_architecture() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/system/architecture")

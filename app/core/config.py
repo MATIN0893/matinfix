@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     accountant_codeword: str = "NSS"
     master_api_key: str | None = None
     master_telegram_user_ids: str = ""
+    cors_origins: str = "https://matinfix-dtceinuc.manus.space,http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -31,6 +32,10 @@ class Settings(BaseSettings):
     @property
     def master_telegram_ids(self) -> set[str]:
         return {item.strip() for item in self.master_telegram_user_ids.split(",") if item.strip()}
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
 
 settings = Settings()
