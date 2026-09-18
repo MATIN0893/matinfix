@@ -845,6 +845,7 @@ async def create_order(message: Message) -> None:
                 brand=brand,
                 model=model,
                 problem=service,
+                quoted_price=decision.price_rub,
             )
     except Exception:
         logger.exception("Failed to create Telegram repair order")
@@ -855,7 +856,8 @@ async def create_order(message: Message) -> None:
         f"📱 {brand} {model}\n"
         f"🛠 {service}\n"
         f"🆔 {repair.id[:8]}\n"
-        f"📌 {STATUS_RU.get(repair.status, repair.status)}"
+        f"📌 {STATUS_RU.get(repair.status, repair.status)}\n"
+        f"💰 Предварительная цена: {repair.quoted_price or 'уточняется'} ₽"
     )
 
 

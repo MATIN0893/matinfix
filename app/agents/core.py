@@ -14,6 +14,7 @@ class CoreDecision:
     language: str
     response: str
     needs_master: bool = False
+    price_rub: int | None = None
 
 
 class MatinAICore:
@@ -47,7 +48,9 @@ class MatinAICore:
             response = MASTER_TEXT_BY_LANGUAGE.get(language, MASTER_TEXT_BY_LANGUAGE["ru"])
         else:
             response = customer_price_text(brand, model, service, decision.price_rub)
-        return CoreDecision(AgentName.CUSTOMER, language, response, decision.needs_master)
+        return CoreDecision(
+            AgentName.CUSTOMER, language, response, decision.needs_master, decision.price_rub
+        )
 
     def route_role(self, text: str) -> AgentName:
         if self._is_accountant_message(text):

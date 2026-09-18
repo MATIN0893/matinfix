@@ -62,6 +62,7 @@ async def create_customer_repair(
     brand: str,
     model: str,
     problem: str,
+    quoted_price: int | None = None,
 ) -> Repair:
     customer = await get_or_create_customer(
         session,
@@ -73,6 +74,7 @@ async def create_customer_repair(
     repair = Repair(
         id=new_id(), workspace_id=workspace_id, customer_id=customer.id,
         brand=brand.strip(), model=model.strip(), problem=problem.strip(), status="new",
+        quoted_price=quoted_price,
     )
     session.add(repair)
     session.add(RepairStatusHistory(
