@@ -880,7 +880,9 @@ async def my_orders(message: Message) -> None:
     for repair in repairs:
         lines.append(
             f"🆔 {repair.id[:8]} · {repair.brand} {repair.model} · "
-            f"{STATUS_RU.get(repair.status, repair.status)}"
+            f"{STATUS_RU.get(repair.status, repair.status)} · "
+            f"{repair.final_price or repair.quoted_price or 'цена уточняется'} ₽ · "
+            f"{'оплачено' if repair.payment_status == 'paid' else 'не оплачено'}"
         )
     await message.answer("\n".join(lines))
 
