@@ -13,7 +13,11 @@ from app.core.config import settings
 from app.crm.service import get_repair_history
 from app.db.models import Base
 from app.db.session import SessionLocal, engine
-from app.telegram.customer_service import create_customer_repair, list_customer_repairs
+from app.telegram.customer_service import (
+    create_customer_repair,
+    get_customer_repair,
+    list_customer_repairs,
+)
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -100,6 +104,7 @@ async def help_command(message: Message) -> None:
         "Команды MATINFIX:\n"
         "/order Бренд Модель неисправность — создать заказ\n"
         "/myorders — показать мои заказы\n"
+        "/status ID — узнать статус заказа\n"
         "/start — начать заново\n\n"
         "Для предварительной цены просто напишите бренд, модель и неисправность."
     )
@@ -170,6 +175,35 @@ async def my_orders(message: Message) -> None:
             f"{STATUS_RU.get(repair.status, repair.status)}"
         )
     await message.answer("\n".join(lines))
+
+
+@router.message(Command("status"))
+async def order_status(message: Message) -> None:
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].strip():
+        await message.answer("Использование: /status ID\nID можно взять из /myorders.")
+        return
+    try:
+        async with SessionLocal() as session:
+            repair = await get_customer_repair(
+                session,
+                workspace_id=settings.telegram_workspace_id,
+                telegram_user_id=_telegram_user_id(message),
+                repair_reference=parts[1],
+            )
+    except Exception:
+        logger.exception("Failed to get Telegram repair status")
+        await message.answer("Не удалось загрузить статус. Попробуйте ещё раз позже.")
+        return
+    if repair is None:
+        await message.answer("Заказ не найден среди ваших заказов. Проверьте ID в /myorders.")
+        return
+    await message.answer(
+        f"Заказ {repair.id[:8]}\n"
+        f"📱 {repair.brand} {repair.model}\n"
+        f"🛠 {repair.problem}\n"
+        f"📌 {STATUS_RU.get(repair.status, repair.status)}"
+    )
 
 
 @router.message()

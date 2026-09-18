@@ -4,7 +4,12 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.models import Base, Workspace
-from app.telegram.customer_service import create_customer_repair, get_or_create_customer, list_customer_repairs
+from app.telegram.customer_service import (
+    create_customer_repair,
+    get_customer_repair,
+    get_or_create_customer,
+    list_customer_repairs,
+)
 
 
 @pytest.fixture
@@ -71,3 +76,33 @@ async def test_telegram_repairs_are_visible_only_to_owner(session) -> None:
     )
     assert repair.customer_id == customer.id
     assert other == []
+
+
+@pytest.mark.asyncio
+async def test_customer_can_find_own_repair_by_short_id_only(session) -> None:
+    repair = await create_customer_repair(
+        session,
+        workspace_id="telegram-a",
+        telegram_user_id="123",
+        username="matin",
+        display_name="Matin",
+        brand="Apple",
+        model="iPhone 15",
+        problem="замена батареи",
+    )
+
+    own = await get_customer_repair(
+        session,
+        workspace_id="telegram-a",
+        telegram_user_id="123",
+        repair_reference=repair.id[:8],
+    )
+    other = await get_customer_repair(
+        session,
+        workspace_id="telegram-a",
+        telegram_user_id="999",
+        repair_reference=repair.id[:8],
+    )
+
+    assert own is not None and own.id == repair.id
+    assert other is None

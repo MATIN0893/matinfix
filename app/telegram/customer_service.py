@@ -106,3 +106,33 @@ async def list_customer_repairs(
         .limit(limit)
     )
     return list(result.all())
+
+
+async def get_customer_repair(
+    session: AsyncSession,
+    *,
+    workspace_id: str,
+    telegram_user_id: str,
+    repair_reference: str,
+) -> Repair | None:
+    """Return a customer's repair by full id or the short id shown by the bot."""
+    link = await session.scalar(
+        select(TelegramCustomer).where(
+            TelegramCustomer.workspace_id == workspace_id,
+            TelegramCustomer.telegram_user_id == telegram_user_id,
+        )
+    )
+    if link is None:
+        return None
+    reference = repair_reference.strip().lower()
+    result = await session.scalars(
+        select(Repair)
+        .where(
+            Repair.workspace_id == workspace_id,
+            Repair.customer_id == link.customer_id,
+            Repair.id.startswith(reference),
+        )
+        .limit(2)
+    )
+    repairs = list(result.all())
+    return repairs[0] if len(repairs) == 1 else None
