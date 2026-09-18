@@ -105,7 +105,7 @@ class PriceEngine:
         for provider in self.providers:
             price = await provider.find(b, m, str(s))
             if price is not None:
-                return PriceDecision(b, model, str(s), int(price), "provider")
+                return PriceDecision(b, model, str(s), int(price), getattr(provider, "source", "provider"))
 
         if s == ServiceKind.SMALL_SOLDERING:
             return PriceDecision(b, model, str(s), 300, "universal")

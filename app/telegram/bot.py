@@ -18,6 +18,8 @@ from sqlalchemy import select
 
 from app.agents.core import MatinAICore
 from app.core.config import settings
+from app.pricing.engine import PriceEngine
+from app.pricing.google_sheets import GoogleSheetsPriceProvider
 from app.crm.service import (
     VALID_STATUSES,
     assign_repair_to_master,
@@ -43,7 +45,7 @@ from app.telegram.customer_service import (
 
 logger = logging.getLogger(__name__)
 router = Router()
-core = MatinAICore()
+core = MatinAICore(PriceEngine(providers=(GoogleSheetsPriceProvider(settings.price_sheet_url),)))
 
 BRANDS = (
     "Apple", "iPhone", "Samsung", "Xiaomi", "Poco", "Redmi", "Honor",

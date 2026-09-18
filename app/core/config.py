@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     master_telegram_user_ids: str = ""
     cors_origins: str = "https://matinfix-dtceinuc.manus.space,http://localhost:3000"
     public_web_url: str = "https://matinfix-dtceinuc.manus.space"
+    price_sheet_url: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
