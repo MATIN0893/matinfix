@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import re
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -44,7 +45,8 @@ class GoogleSheetsPriceProvider:
         for row in self._rows:
             if normalize_brand(row.brand) != wanted_brand:
                 continue
-            if normalize_text(row.model) != wanted_model:
+            row_model = normalize_text(row.model)
+            if row_model != wanted_model and not re.search(rf"(?<!\w){re.escape(wanted_model)}(?!\w)", row_model):
                 continue
             if detect_service(row.service) is wanted_service:
                 return row.price_rub
