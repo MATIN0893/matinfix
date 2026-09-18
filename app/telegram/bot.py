@@ -6,7 +6,14 @@ import re
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    Message,
+    ReplyKeyboardMarkup,
+)
 from sqlalchemy import select
 
 from app.agents.core import MatinAICore
@@ -114,6 +121,17 @@ def _status_keyboard(repair_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _customer_menu() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📝 Создать заказ"), KeyboardButton(text="📦 Мои заказы")],
+            [KeyboardButton(text="🔎 Статус заказа"), KeyboardButton(text="📜 История заказа")],
+            [KeyboardButton(text="ℹ️ Помощь")],
+        ],
+        resize_keyboard=True,
+    )
+
+
 @router.message(CommandStart())
 async def start(message: Message) -> None:
     await message.answer(
@@ -121,8 +139,29 @@ async def start(message: Message) -> None:
         "Напишите модель устройства и что нужно сделать.\n"
         "Например: Realme C25s заменить дисплей\n\n"
         "/order — создать заказ в сервисе\n"
-        "/myorders — мои заказы"
+        "/myorders — мои заказы",
+        reply_markup=_customer_menu(),
     )
+
+
+@router.message(F.text == "📝 Создать заказ")
+async def menu_create_order(message: Message) -> None:
+    await message.answer("Напишите заказ так: /order Realme C25s заменить дисплей")
+
+
+@router.message(F.text == "🔎 Статус заказа")
+async def menu_status(message: Message) -> None:
+    await message.answer("Введите: /status ID\nID можно взять из раздела «Мои заказы».")
+
+
+@router.message(F.text == "📜 История заказа")
+async def menu_history(message: Message) -> None:
+    await message.answer("Введите: /history ID\nID можно взять из раздела «Мои заказы».")
+
+
+@router.message(F.text == "ℹ️ Помощь")
+async def menu_help(message: Message) -> None:
+    await help_command(message)
 
 
 @router.message(Command("help"))
@@ -436,6 +475,7 @@ async def create_order(message: Message) -> None:
 
 
 @router.message(Command("myorders"))
+@router.message(F.text == "📦 Мои заказы")
 async def my_orders(message: Message) -> None:
     try:
         async with SessionLocal() as session:
