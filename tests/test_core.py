@@ -1,6 +1,8 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import settings
+from app.api.master import require_master_key
 from app.main import app
 
 
@@ -44,3 +46,20 @@ async def test_unknown_iphone_goes_to_master() -> None:
     assert response.status_code == 200
     assert response.json()["needs_master"] is True
     assert response.json()["price_rub"] is None
+
+
+@pytest.mark.asyncio
+async def test_master_api_rejects_invalid_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "master_api_key", "test-secret")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            "/api/v1/master/orders/status",
+            json={"workspace_id": "workspace-a", "repair_id": "missing", "status": "ready"},
+        )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_master_api_allows_request_with_valid_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "master_api_key", "test-secret")
+    assert require_master_key("test-secret") is None
