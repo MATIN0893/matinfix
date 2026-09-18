@@ -3,7 +3,15 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.crm.service import change_repair_status, create_repair, get_repair, get_repair_history, list_repairs
+from app.crm.service import (
+    assign_repair_to_master,
+    change_repair_status,
+    create_repair,
+    get_repair,
+    get_repair_assignment,
+    get_repair_history,
+    list_repairs,
+)
 from app.db.models import Base, Workspace
 
 
@@ -105,3 +113,47 @@ async def test_list_repairs_filters_by_status_and_workspace(session) -> None:
     assert [repair.id for repair in ready] == [second.id]
     assert [repair.id for repair in new] == [first.id]
     assert all(repair.workspace_id == "workspace-a" for repair in ready + new)
+
+
+@pytest.mark.asyncio
+async def test_repair_assignment_is_workspace_scoped_and_replaceable(session) -> None:
+    repair = await create_repair(
+        session,
+        workspace_id="workspace-a",
+        customer_name="Client",
+        customer_phone=None,
+        brand="Realme",
+        model="C25s",
+        problem="display",
+    )
+
+    first = await assign_repair_to_master(
+        session,
+        workspace_id="workspace-a",
+        repair_id=repair.id,
+        telegram_user_id="master-1",
+        display_name="Master One",
+    )
+    assert first is not None
+    assignment = await get_repair_assignment(
+        session, workspace_id="workspace-a", repair_id=repair.id
+    )
+    assert assignment is not None
+    assert assignment[1].display_name == "Master One"
+
+    second = await assign_repair_to_master(
+        session,
+        workspace_id="workspace-a",
+        repair_id=repair.id,
+        telegram_user_id="master-2",
+        display_name="Master Two",
+    )
+    assert second is not None
+    replacement = await get_repair_assignment(
+        session, workspace_id="workspace-a", repair_id=repair.id
+    )
+    assert replacement is not None
+    assert replacement[1].display_name == "Master Two"
+    assert await get_repair_assignment(
+        session, workspace_id="workspace-b", repair_id=repair.id
+    ) is None

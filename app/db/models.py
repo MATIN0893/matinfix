@@ -63,6 +63,22 @@ class Repair(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class RepairAssignment(Base):
+    __tablename__ = "repair_assignments"
+    repair_id: Mapped[str] = mapped_column(
+        ForeignKey("repairs.id", ondelete="CASCADE"), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    master_id: Mapped[str] = mapped_column(
+        ForeignKey("masters.id", ondelete="CASCADE"), index=True
+    )
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class RepairStatusHistory(Base):
     __tablename__ = "repair_status_history"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

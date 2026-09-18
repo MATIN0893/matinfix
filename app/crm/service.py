@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Customer, Repair, RepairStatusHistory, new_id
+from app.db.models import Customer, Master, Repair, RepairAssignment, RepairStatusHistory, new_id
 
 VALID_STATUSES = {"new", "diagnostics", "waiting_part", "repairing", "ready", "issued", "cancelled"}
 
@@ -110,3 +110,58 @@ async def change_repair_status(
     await session.commit()
     await session.refresh(repair)
     return repair
+
+
+async def assign_repair_to_master(
+    session: AsyncSession,
+    *,
+    workspace_id: str,
+    repair_id: str,
+    telegram_user_id: str,
+    display_name: str,
+) -> RepairAssignment | None:
+    repair = await get_repair(session, workspace_id=workspace_id, repair_id=repair_id)
+    if repair is None:
+        return None
+    master = await session.scalar(
+        select(Master).where(
+            Master.workspace_id == workspace_id,
+            Master.telegram_user_id == telegram_user_id,
+        )
+    )
+    if master is None:
+        master = Master(
+            id=new_id(),
+            workspace_id=workspace_id,
+            telegram_user_id=telegram_user_id,
+            display_name=display_name,
+        )
+        session.add(master)
+        await session.flush()
+    assignment = await session.get(RepairAssignment, repair_id)
+    if assignment is None:
+        assignment = RepairAssignment(
+            repair_id=repair_id,
+            workspace_id=workspace_id,
+            master_id=master.id,
+        )
+        session.add(assignment)
+    else:
+        assignment.master_id = master.id
+    await session.commit()
+    await session.refresh(assignment)
+    return assignment
+
+
+async def get_repair_assignment(
+    session: AsyncSession, *, workspace_id: str, repair_id: str
+) -> tuple[RepairAssignment, Master] | None:
+    result = await session.execute(
+        select(RepairAssignment, Master)
+        .join(Master, Master.id == RepairAssignment.master_id)
+        .where(
+            RepairAssignment.workspace_id == workspace_id,
+            RepairAssignment.repair_id == repair_id,
+        )
+    )
+    return result.one_or_none()

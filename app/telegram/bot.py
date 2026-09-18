@@ -11,7 +11,13 @@ from sqlalchemy import select
 
 from app.agents.core import MatinAICore
 from app.core.config import settings
-from app.crm.service import VALID_STATUSES, change_repair_status, get_repair_history
+from app.crm.service import (
+    VALID_STATUSES,
+    assign_repair_to_master,
+    change_repair_status,
+    get_repair_assignment,
+    get_repair_history,
+)
 from app.db.models import Base, Repair
 from app.db.session import SessionLocal, engine
 from app.telegram.customer_service import (
@@ -118,6 +124,7 @@ async def help_command(message: Message) -> None:
         await message.answer(
             "Мастерские команды:\n"
             "/orders [STATUS] — список заказов или фильтр по статусу\n"
+            "/assign ID — взять заказ в работу\n"
             "/setstatus ID STATUS — изменить статус"
         )
 
@@ -147,13 +154,48 @@ async def master_orders(message: Message) -> None:
         suffix = f" со статусом {status_filter}" if status_filter else ""
         await message.answer(f"Заказов{suffix} пока нет.")
         return
-    title = f"Заказы: {status_filter}" if status_filter else "Все заказы"
-    await message.answer("\n".join(
-        [title + ":"] + [
-            f"{repair.id[:8]} · {repair.brand} {repair.model} · {STATUS_RU.get(repair.status, repair.status)}"
-            for repair in repairs
-        ]
-    ))
+        title = f"Заказы: {status_filter}" if status_filter else "Все заказы"
+        lines = [title + ":"]
+        for repair in repairs:
+            assignment = await get_repair_assignment(
+                session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
+            )
+            master_text = f" · мастер: {assignment[1].display_name}" if assignment else " · не назначен"
+            lines.append(
+                f"{repair.id[:8]} · {repair.brand} {repair.model} · "
+                f"{STATUS_RU.get(repair.status, repair.status)}{master_text}"
+            )
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("assign"))
+async def master_assign(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) != 2:
+        await message.answer("Использование: /assign ID")
+        return
+    async with SessionLocal() as session:
+        repairs = await session.scalars(
+            select(Repair).where(
+                Repair.workspace_id == settings.telegram_workspace_id,
+                Repair.id.startswith(parts[1].strip().lower()),
+            ).limit(2)
+        )
+        matches = list(repairs.all())
+        if len(matches) != 1:
+            await message.answer("Заказ не найден или ID неоднозначен.")
+            return
+        assignment = await assign_repair_to_master(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            repair_id=matches[0].id,
+            telegram_user_id=_telegram_user_id(message),
+            display_name=_display_name(message) or "Мастер",
+        )
+    await message.answer(f"Заказ {assignment.repair_id[:8]} назначен вам.")
 
 
 @router.message(Command("setstatus"))
