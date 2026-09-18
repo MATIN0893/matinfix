@@ -34,7 +34,13 @@ class GoogleSheetsPriceProvider:
         await self._refresh_if_needed()
         wanted_brand = normalize_brand(brand)
         wanted_model = normalize_text(model)
-        wanted_service = service if isinstance(service, ServiceKind) else detect_service(service)
+        if isinstance(service, ServiceKind):
+            wanted_service = service
+        else:
+            try:
+                wanted_service = ServiceKind(service)
+            except ValueError:
+                wanted_service = detect_service(service)
         for row in self._rows:
             if normalize_brand(row.brand) != wanted_brand:
                 continue
