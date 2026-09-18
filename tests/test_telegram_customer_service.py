@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.models import Base, Workspace
+from app.telegram.bot import _status_keyboard
 from app.telegram.customer_service import (
     create_customer_repair,
     get_customer_repair,
@@ -106,3 +107,15 @@ async def test_customer_can_find_own_repair_by_short_id_only(session) -> None:
 
     assert own is not None and own.id == repair.id
     assert other is None
+
+
+def test_master_status_keyboard_contains_all_operational_statuses() -> None:
+    keyboard = _status_keyboard("repair-123")
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+
+    assert "repair_status:repair-123:diagnostics" in callbacks
+    assert "repair_status:repair-123:waiting_part" in callbacks
+    assert "repair_status:repair-123:repairing" in callbacks
+    assert "repair_status:repair-123:ready" in callbacks
+    assert "repair_status:repair-123:issued" in callbacks
+    assert "repair_status:repair-123:cancelled" in callbacks

@@ -6,7 +6,7 @@ import re
 
 from aiogram import Bot, Dispatcher, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 
 from app.agents.core import MatinAICore
@@ -99,6 +99,18 @@ def _telegram_user_id(message: Message) -> str:
     return str(message.from_user.id)
 
 
+def _status_keyboard(repair_id: str) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text="Диагностика", callback_data=f"repair_status:{repair_id}:diagnostics")],
+        [InlineKeyboardButton(text="Ожидание детали", callback_data=f"repair_status:{repair_id}:waiting_part")],
+        [InlineKeyboardButton(text="Ремонт", callback_data=f"repair_status:{repair_id}:repairing")],
+        [InlineKeyboardButton(text="Готов", callback_data=f"repair_status:{repair_id}:ready")],
+        [InlineKeyboardButton(text="Выдан", callback_data=f"repair_status:{repair_id}:issued"),
+         InlineKeyboardButton(text="Отменён", callback_data=f"repair_status:{repair_id}:cancelled")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 @router.message(CommandStart())
 async def start(message: Message) -> None:
     await message.answer(
@@ -165,7 +177,49 @@ async def master_orders(message: Message) -> None:
                 f"{repair.id[:8]} · {repair.brand} {repair.model} · "
                 f"{STATUS_RU.get(repair.status, repair.status)}{master_text}"
             )
+            await message.answer(
+                f"Заказ {repair.id[:8]}\n{repair.brand} {repair.model}\n"
+                f"Статус: {STATUS_RU.get(repair.status, repair.status)}{master_text}",
+                reply_markup=_status_keyboard(repair.id),
+            )
     await message.answer("\n".join(lines))
+
+
+@router.callback_query(lambda query: query.data and query.data.startswith("repair_status:"))
+async def repair_status_callback(callback: CallbackQuery) -> None:
+    if callback.from_user is None or str(callback.from_user.id) not in settings.master_telegram_ids:
+        await callback.answer("Команда доступна только мастеру.", show_alert=True)
+        return
+    _, repair_id, status = (callback.data or "").split(":", maxsplit=2)
+    if status not in VALID_STATUSES:
+        await callback.answer("Неизвестный статус.", show_alert=True)
+        return
+    async with SessionLocal() as session:
+        repair = await change_repair_status(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            repair_id=repair_id,
+            status=status,
+        )
+        if repair is None:
+            await callback.answer("Заказ не найден.", show_alert=True)
+            return
+        customer_telegram_id = await get_repair_telegram_user_id(
+            session, workspace_id=settings.telegram_workspace_id, repair_id=repair.id
+        )
+    await callback.answer(f"Статус: {STATUS_RU.get(status, status)}")
+    if callback.message is not None:
+        await callback.message.edit_reply_markup(reply_markup=_status_keyboard(repair.id))
+        await callback.message.answer(
+            f"Заказ {repair.id[:8]} обновлён: {STATUS_RU.get(repair.status, repair.status)}"
+        )
+    if customer_telegram_id and status in {"ready", "issued", "cancelled"} and callback.bot:
+        await callback.bot.send_message(
+            customer_telegram_id,
+            f"Обновление заказа {repair.id[:8]}:\n"
+            f"📱 {repair.brand} {repair.model}\n"
+            f"📌 {STATUS_RU.get(repair.status, repair.status)}",
+        )
 
 
 @router.message(Command("assign"))
