@@ -10,7 +10,7 @@ from app.api.master import router as master_router
 from app.api.system import router as system_router
 from app.api.v1 import router as api_router
 from app.core.config import settings
-from app.db.models import Base
+from app.db.migrations import upgrade_database
 from app.db.session import SessionLocal, engine
 from app.telegram.bot import router as telegram_router
 
@@ -29,8 +29,7 @@ async def _run_telegram() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    await asyncio.to_thread(upgrade_database)
     telegram_task = None
     if settings.telegram_bot_token:
         telegram_task = asyncio.create_task(_run_telegram())
