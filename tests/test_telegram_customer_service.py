@@ -62,4 +62,5 @@ async def test_telegram_repairs_are_visible_only_to_owner(session) -> None:
     )
 
     assert [item.id for item in own] == [repair.id]
+    assert repair.customer_id == (await get_or_create_customer(\n        session,\n        workspace_id="telegram-a",\n        telegram_user_id="123",\n        username="matin",\n        display_name="Matin",\n    )).id
     assert other == []
