@@ -7,7 +7,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.core.config import settings
-from app.db.models import Repair
+from app.db.models import Repair, RepairReview
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,35 @@ def customer_status_keyboard(repair: Repair) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="Открыть статус", url=public_repair_url(repair))]]
     )
+
+
+def review_message(repair: Repair, review: RepairReview) -> str:
+    stars = "★" * review.rating + "☆" * (5 - review.rating)
+    text = (
+        "Новый отзыв клиента MATINFIX\n\n"
+        f"Устройство: {repair.brand} {repair.model}\n"
+        f"Заказ: {repair.id[:8]}\n"
+        f"Оценка: {stars}"
+    )
+    if review.comment:
+        text += f"\nКомментарий: {review.comment}"
+    return text
+
+
+async def notify_masters_about_review(repair: Repair, review: RepairReview) -> None:
+    if not settings.telegram_bot_token or not settings.master_telegram_ids:
+        return
+    bot = Bot(settings.telegram_bot_token)
+    try:
+        for telegram_user_id in settings.master_telegram_ids:
+            with suppress(Exception):
+                await bot.send_message(
+                    chat_id=telegram_user_id,
+                    text=review_message(repair, review),
+                    reply_markup=customer_status_keyboard(repair),
+                )
+    finally:
+        await bot.session.close()
 
 
 async def notify_customer_status_changed(

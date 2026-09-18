@@ -14,7 +14,11 @@ from app.crm.service import (
 )
 from app.crm.reviews import create_review, get_review_by_repair
 from app.db.session import get_session
-from app.notifications import notify_customer_status_changed, notify_masters_about_new_repair
+from app.notifications import (
+    notify_customer_status_changed,
+    notify_masters_about_new_repair,
+    notify_masters_about_review,
+)
 from app.telegram.customer_service import get_repair_telegram_user_id
 
 router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
@@ -158,6 +162,7 @@ async def create_public_repair_review(
     except ValueError as exc:
         status_code = 409 if "already exists" in str(exc) else 400
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    await notify_masters_about_review(repair, review)
     return {"rating": review.rating, "comment": review.comment, "created_at": review.created_at}
 
 

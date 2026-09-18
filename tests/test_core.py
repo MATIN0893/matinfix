@@ -10,6 +10,7 @@ from app.notifications import (
     new_repair_keyboard,
     new_repair_message,
     public_repair_url,
+    review_message,
 )
 
 
@@ -52,6 +53,9 @@ def test_new_repair_notification_contains_public_link_data() -> None:
     repair.status = "repairing"
     assert "В ремонте" in customer_status_message(repair, "Поставили новый дисплей")
     assert customer_status_keyboard(repair).inline_keyboard[0][0].url.endswith("public-token")
+    review = type("ReviewStub", (), {"rating": 4, "comment": "Всё отлично"})()
+    assert "★★★★☆" in review_message(repair, review)
+    assert "Всё отлично" in review_message(repair, review)
 
 
 @pytest.mark.asyncio
