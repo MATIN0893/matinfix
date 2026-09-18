@@ -28,7 +28,12 @@ from app.crm.service import (
 from app.crm.reviews import list_reviews, review_stats, set_review_approval
 from app.db.models import Base, Repair, RepairAssignment
 from app.db.session import SessionLocal, engine
-from app.notifications import notify_customer_review_published, notify_customer_status_changed
+from app.notifications import (
+    notify_customer_review_published,
+    notify_customer_status_changed,
+    review_message,
+    review_moderation_keyboard,
+)
 from app.telegram.customer_service import (
     create_customer_repair,
     get_customer_repair,
@@ -142,6 +147,7 @@ def _master_menu() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🔧 В ремонте"), KeyboardButton(text="✅ Готовые")],
             [KeyboardButton(text="👤 Мои заказы"), KeyboardButton(text="📊 Статистика")],
             [KeyboardButton(text="⭐ Отзывы")],
+            [KeyboardButton(text="🕒 На модерации")],
             [KeyboardButton(text="📦 Склад")],
             [KeyboardButton(text="ℹ️ Помощь")],
         ],
@@ -266,6 +272,30 @@ async def menu_master_reviews(message: Message) -> None:
         comment = f" — {review.comment}" if review.comment else ""
         lines.append(f"{stars} · {repair.brand} {repair.model}{comment}")
     await message.answer("\n".join(lines))
+
+
+@router.message(F.text == "🕒 На модерации")
+async def menu_pending_reviews(message: Message) -> None:
+    if not _is_master(message):
+        await message.answer("Команда доступна только мастеру.")
+        return
+    async with SessionLocal() as session:
+        pending = await list_reviews(
+            session,
+            workspace_id=settings.telegram_workspace_id,
+            limit=10,
+            approved_only=False,
+        )
+        pending = [(review, repair) for review, repair in pending if not review.approved]
+    if not pending:
+        await message.answer("Отзывов на модерации нет.")
+        return
+    await message.answer(f"На модерации: {len(pending)}")
+    for review, repair in pending:
+        await message.answer(
+            review_message(repair, review),
+            reply_markup=review_moderation_keyboard(review),
+        )
 
 
 @router.message(Command("help"))

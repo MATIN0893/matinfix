@@ -40,11 +40,13 @@ async def create_review(
 
 
 async def list_reviews(
-    session: AsyncSession, *, workspace_id: str, limit: int = 10, approved_only: bool = True
+    session: AsyncSession, *, workspace_id: str, limit: int = 10, approved_only: bool | None = True
 ) -> list[tuple[RepairReview, Repair]]:
     conditions = [RepairReview.workspace_id == workspace_id]
-    if approved_only:
+    if approved_only is True:
         conditions.append(RepairReview.approved.is_(True))
+    elif approved_only is False:
+        conditions.append(RepairReview.approved.is_(False))
     result = await session.execute(
         select(RepairReview, Repair)
         .join(Repair, Repair.id == RepairReview.repair_id)
