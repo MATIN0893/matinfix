@@ -12,6 +12,7 @@ from app.crm.service import (
     get_repair_history,
     list_repairs,
 )
+from app.crm.reviews import create_review, get_review_by_repair
 from app.db.session import get_session
 from app.notifications import notify_customer_status_changed, notify_masters_about_new_repair
 from app.telegram.customer_service import get_repair_telegram_user_id
@@ -33,6 +34,11 @@ class RepairStatusRequest(BaseModel):
     status: str = Field(min_length=1, max_length=32)
     comment: str | None = Field(default=None, max_length=4000)
     photo_file_id: str | None = Field(default=None, max_length=256)
+
+
+class RepairReviewRequest(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=2000)
 
 
 def repair_response(repair) -> dict:
@@ -66,6 +72,7 @@ def history_response(item) -> dict:
 
 
 def public_repair_response(repair, history) -> dict:
+    review = getattr(repair, "_public_review", None)
     return {
         "id": repair.id,
         "brand": repair.brand,
@@ -76,6 +83,12 @@ def public_repair_response(repair, history) -> dict:
         "payment_status": repair.payment_status,
         "created_at": repair.created_at,
         "history": [history_response(item) for item in history],
+        "review": None if review is None else {
+            "rating": review.rating,
+            "comment": review.comment,
+            "created_at": review.created_at,
+        },
+        "can_review": repair.status in {"ready", "issued"} and review is None,
     }
 
 
@@ -125,7 +138,27 @@ async def get_public_repair_order(
     history = await get_repair_history(
         session, workspace_id=repair.workspace_id, repair_id=repair.id
     )
+    repair._public_review = await get_review_by_repair(session, repair_id=repair.id)
     return public_repair_response(repair, history)
+
+
+@router.post("/public/repairs/{public_token}/review", status_code=201)
+async def create_public_repair_review(
+    public_token: str,
+    request: RepairReviewRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    repair = await get_repair_by_public_token(session, public_token=public_token)
+    if repair is None:
+        raise HTTPException(status_code=404, detail="public repair link not found")
+    try:
+        review = await create_review(
+            session, repair=repair, rating=request.rating, comment=request.comment
+        )
+    except ValueError as exc:
+        status_code = 409 if "already exists" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    return {"rating": review.rating, "comment": review.comment, "created_at": review.created_at}
 
 
 @router.get("/repairs")

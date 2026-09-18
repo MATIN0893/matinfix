@@ -73,6 +73,16 @@ class Repair(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class RepairReview(Base):
+    __tablename__ = "repair_reviews"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    repair_id: Mapped[str] = mapped_column(ForeignKey("repairs.id", ondelete="CASCADE"), unique=True, index=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    rating: Mapped[int] = mapped_column(Integer)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class RepairAssignment(Base):
     __tablename__ = "repair_assignments"
     repair_id: Mapped[str] = mapped_column(
