@@ -146,14 +146,31 @@ async def test_public_review_flow_requires_approval(monkeypatch: pytest.MonkeyPa
             )
             assert created.status_code == 201
             token = created.json()["public_token"]
+            public_before = await client.get(f"/api/v1/crm/public/repairs/{token}")
+            assert public_before.status_code == 200
+            assert public_before.json()["status"] == "new"
+            assert public_before.json()["can_review"] is False
             blocked = await client.post(f"/api/v1/crm/public/repairs/{token}/review", json={"rating": 5, "comment": "Отлично"})
             assert blocked.status_code == 400
-            await client.patch(
+            updating = await client.patch(
+                f"/api/v1/crm/repairs/{created.json()['id']}/status",
+                json={"workspace_id": "telegram-default", "status": "repairing", "comment": "Проверяем плату", "photo_file_id": "telegram-photo-id"},
+            )
+            assert updating.status_code == 200
+            public_repairing = await client.get(f"/api/v1/crm/public/repairs/{token}")
+            assert public_repairing.json()["status"] == "repairing"
+            assert public_repairing.json()["history"][-1]["comment"] == "Проверяем плату"
+            assert public_repairing.json()["history"][-1]["photo_file_id"] == "telegram-photo-id"
+            ready = await client.patch(
                 f"/api/v1/crm/repairs/{created.json()['id']}/status",
                 json={"workspace_id": "telegram-default", "status": "ready"},
             )
+            assert ready.status_code == 200
             submitted = await client.post(f"/api/v1/crm/public/repairs/{token}/review", json={"rating": 5, "comment": "Отлично"})
             assert submitted.status_code == 201
+            public_after = await client.get(f"/api/v1/crm/public/repairs/{token}")
+            assert public_after.json()["can_review"] is False
+            assert public_after.json()["review"]["rating"] == 5
             assert (await client.get("/api/v1/crm/public/reviews?workspace_id=telegram-default")).json()["items"] == []
         async with factory() as session:
             review = await session.scalar(select(RepairReview))
