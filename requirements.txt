@@ -1,0 +1,2 @@
+# Experimental requirements.txt with a non-existent package to test pip install failure handling
+nonexistent-matinfix-recovery-test-package-xyz==99.9.9
