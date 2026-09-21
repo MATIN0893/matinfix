@@ -19,3 +19,10 @@ async def architecture() -> dict[str, object]:
         },
         "services": ["price", "stock", "crm", "accounting", "knowledge"],
     }
+
+
+@router.get("/experimental/trigger-error")
+async def trigger_experimental_error() -> dict[str, str]:
+    """Endpoint designed to trigger the experimental ImportError dynamically."""
+    from app.experimental import broken
+    return {"status": "ok"}
